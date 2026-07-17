@@ -1,20 +1,122 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleDriveService } from './googleDrive';
-import { Brain, CloudLightning, Save, Search, LogOut, CheckCircle, WifiOff } from 'lucide-react';
+import './App.css';
+import {
+  Brain,
+  CloudLightning,
+  Save,
+  Search,
+  LogOut,
+  CheckCircle,
+  WifiOff,
+  Star,
+  Plus,
+  CalendarDays,
+  Sparkles,
+  Tag,
+  Heart,
+  Trash2,
+  Filter,
+  X,
+  ChevronRight,
+} from 'lucide-react';
 
 // TODO: Replace with your actual client ID from Google Cloud Console
-const CLIENT_ID = "574535920766-ntjn0mr37h07sd3l1n5c3o2j4na7bqok.apps.googleusercontent.com"; 
+const CLIENT_ID = '574535920766-ntjn0mr37h07sd3l1n5c3o2j4na7bqok.apps.googleusercontent.com';
+const DEFAULT_CATEGORIES = ['Political', 'Religious', 'Poetry', 'Economics'];
+
+function makeBlankForm(categories) {
+  return {
+    subject: '',
+    description: '',
+    category: categories[0] || DEFAULT_CATEGORIES[0],
+    entryDate: new Date().toISOString().slice(0, 10),
+    favorite: false,
+  };
+}
+
+function normalizeCategories(categories) {
+  const parsed = Array.isArray(categories) ? categories.filter(Boolean) : [];
+  return parsed.length ? parsed : DEFAULT_CATEGORIES;
+}
+
+function normalizeSnapshot(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { thoughts: [], categories: DEFAULT_CATEGORIES };
+  }
+
+  return {
+    thoughts: Array.isArray(payload.thoughts) ? payload.thoughts : [],
+    categories: normalizeCategories(payload.categories),
+  };
+}
+
+function formatDate(value) {
+  if (!value) return 'No date';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+
+  return parsed.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
 
 export default function App() {
-  const [token, setToken] = useState(localStorage.getItem('gdrive_token') || null);
-  const [thoughts, setThoughts] = useState(JSON.parse(localStorage.getItem('cached_thoughts')) || []);
-  const [inputText, setInputText] = useState('');
+  const [token, setToken] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('gdrive_token') || null;
+  });
+  const [thoughts, setThoughts] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem('cached_thoughts');
+      const parsed = JSON.parse(saved || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [categories, setCategories] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_CATEGORIES;
+    try {
+      const saved = localStorage.getItem('cached_categories');
+      const parsed = JSON.parse(saved || 'null');
+      return normalizeCategories(parsed);
+    } catch {
+      return DEFAULT_CATEGORIES;
+    }
+  });
+  const [formData, setFormData] = useState(() => makeBlankForm(DEFAULT_CATEGORIES));
   const [searchQuery, setSearchQuery] = useState('');
-  const [status, setStatus] = useState('Idle'); // Idle, Syncing, Saved, Error
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [status, setStatus] = useState('Ready');
   const [fileId, setFileId] = useState(null);
+  const [selectedThought, setSelectedThought] = useState(null);
   const tokenClientRef = useRef(null);
 
-  // Initialize Google Identity Services
+  useEffect(() => {
+    if (categories.length && formData.category && !categories.includes(formData.category)) {
+      setFormData((current) => ({ ...current, category: categories[0] }));
+    }
+  }, [categories, formData.category]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cached_thoughts', JSON.stringify(thoughts));
+    }
+  }, [thoughts]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cached_categories', JSON.stringify(categories));
+    }
+  }, [categories]);
+
   useEffect(() => {
     const initGoogle = () => {
       if (window.google?.accounts?.oauth2) {
@@ -36,28 +138,82 @@ export default function App() {
       return false;
     };
 
-    // Try immediately — GIS might already be loaded
-    if (initGoogle()) return;
+    if (initGoogle()) return undefined;
 
-    // Otherwise wait for it to load
-    const interval = setInterval(() => {
-      if (initGoogle()) clearInterval(interval);
+    const interval = window.setInterval(() => {
+      if (initGoogle()) window.clearInterval(interval);
     }, 200);
 
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, []);
 
-  // Sync data automatically whenever a valid token is established
+  const mergeThoughts = (local, remote) => {
+    const map = new Map();
+    (remote || []).forEach((thought) => map.set(thought.id, thought));
+    (local || []).forEach((thought) => map.set(thought.id, thought));
+    return Array.from(map.values()).sort((left, right) => {
+      const leftTime = Number(left.createdAt || left.timestamp || 0);
+      const rightTime = Number(right.createdAt || right.timestamp || 0);
+      return rightTime - leftTime;
+    });
+  };
+
+  const mergeCategories = (local, remote) => {
+    const combined = [...new Set([...(remote || []), ...(local || [])].filter(Boolean))];
+    return combined.length ? combined : DEFAULT_CATEGORIES;
+  };
+
+  const syncWithDrive = async (currentThoughts = thoughts, currentCategories = categories) => {
+    if (!token) return;
+    setStatus('Syncing...');
+    try {
+      const folderId = await GoogleDriveService.getOrCreateFolder(token);
+      const { fileId: activeFileId, isNew } = await GoogleDriveService.getOrCreateDataFile(token, folderId);
+      setFileId(activeFileId);
+
+      const snapshot = {
+        thoughts: currentThoughts,
+        categories: currentCategories,
+      };
+
+      if (isNew) {
+        await GoogleDriveService.uploadThoughts(token, activeFileId, snapshot);
+      } else {
+        const remoteState = normalizeSnapshot(await GoogleDriveService.downloadThoughts(token, activeFileId));
+        const mergedThoughts = mergeThoughts(currentThoughts, remoteState.thoughts);
+        const mergedCategories = mergeCategories(currentCategories, remoteState.categories);
+        setThoughts(mergedThoughts);
+        setCategories(mergedCategories);
+        await GoogleDriveService.uploadThoughts(token, activeFileId, {
+          thoughts: mergedThoughts,
+          categories: mergedCategories,
+        });
+      }
+      setStatus('Saved');
+    } catch (error) {
+      console.error(error);
+      setStatus('Sync Error');
+    }
+  };
+
   useEffect(() => {
     if (token) {
-      syncWithDrive();
+      syncWithDrive(thoughts, categories);
     }
   }, [token]);
 
-  // Persist to local storage as fallback/cache
   useEffect(() => {
-    localStorage.setItem('cached_thoughts', JSON.stringify(thoughts));
-  }, [thoughts]);
+    if (!selectedThought) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedThought(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedThought]);
 
   const handleLogin = () => {
     if (tokenClientRef.current) {
@@ -72,145 +228,416 @@ export default function App() {
     setStatus('Idle');
   };
 
-  const syncWithDrive = async (currentThoughts = thoughts) => {
-    if (!token) return;
-    setStatus('Syncing...');
-    try {
-      const folderId = await GoogleDriveService.getOrCreateFolder(token);
-      const { fileId: activeFileId, isNew } = await GoogleDriveService.getOrCreateDataFile(token, folderId);
-      setFileId(activeFileId);
+  const handleSaveThought = async (event) => {
+    event.preventDefault();
+    const subject = formData.subject.trim();
+    const description = formData.description.trim();
+    if (!subject && !description) return;
 
-      if (isNew) {
-        await GoogleDriveService.uploadThoughts(token, activeFileId, currentThoughts);
-      } else {
-        const driveThoughts = await GoogleDriveService.downloadThoughts(token, activeFileId);
-        // Merge strategy: prioritize local if newer or combine uniquely
-        const merged = mergeThoughts(currentThoughts, driveThoughts);
-        setThoughts(merged);
-        await GoogleDriveService.uploadThoughts(token, activeFileId, merged);
-      }
-      setStatus('Saved');
-    } catch (err) {
-      console.error(err);
-      setStatus('Sync Error');
-    }
-  };
-
-  const mergeThoughts = (local, remote) => {
-    const map = new Map();
-    remote.forEach(t => map.set(t.id, t));
-    local.forEach(t => map.set(t.id, t)); // Local overrides or updates matching IDs
-    return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
-  };
-
-  const handleSaveThought = async (e) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-
-    const newThought = {
+    const nextThought = {
       id: crypto.randomUUID(),
-      text: inputText.trim(),
-      timestamp: Date.now(),
+      subject: subject || 'Untitled thought',
+      description: description || 'A thoughtful note captured for later.',
+      category: formData.category || categories[0] || DEFAULT_CATEGORIES[0],
+      entryDate: formData.entryDate || new Date().toISOString().slice(0, 10),
+      favorite: Boolean(formData.favorite),
+      createdAt: Date.now(),
     };
 
-    const updatedThoughts = [newThought, ...thoughts];
+    const updatedThoughts = [nextThought, ...thoughts];
     setThoughts(updatedThoughts);
-    setInputText('');
+    setFormData(makeBlankForm(categories));
+    setStatus('Saved Locally');
 
     if (token) {
-      await syncWithDrive(updatedThoughts);
-    } else {
-      setStatus('Saved Locally (Offline)');
+      await syncWithDrive(updatedThoughts, categories);
     }
   };
 
-  const filteredThoughts = thoughts.filter(t =>
-    t.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name || categories.includes(name)) return;
+
+    const nextCategories = [...categories, name];
+    setCategories(nextCategories);
+    setFormData((current) => ({ ...current, category: name }));
+    setNewCategoryName('');
+    setStatus('Category added');
+
+    if (token) {
+      await syncWithDrive(thoughts, nextCategories);
+    }
+  };
+
+  const toggleFavorite = (id) => {
+    setThoughts((current) => current.map((thought) => (thought.id === id ? { ...thought, favorite: !thought.favorite } : thought)));
+  };
+
+  const deleteThought = (id) => {
+    setThoughts((current) => current.filter((thought) => thought.id !== id));
+    if (selectedThought?.id === id) {
+      setSelectedThought(null);
+    }
+    setStatus('Thought removed');
+  };
+
+  const visibleThoughts = thoughts.filter((thought) => {
+    const haystack = `${thought.subject} ${thought.description} ${thought.category}`.toLowerCase();
+    const matchesQuery = haystack.includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || thought.category === selectedCategory;
+    const matchesFavorite = !favoritesOnly || thought.favorite;
+    return matchesQuery && matchesCategory && matchesFavorite;
+  });
+
+  const favoriteCount = thoughts.filter((thought) => thought.favorite).length;
+  const summarizeText = (value, max = 112) => {
+    const baseValue = value || 'No description added yet.';
+    return baseValue.length > max ? `${baseValue.slice(0, max)}…` : baseValue;
+  };
+  const groupedRecentThoughts = categories
+    .map((category) => {
+      const items = thoughts
+        .filter((thought) => thought.category === category)
+        .sort((left, right) => Number(right.createdAt || right.timestamp || 0) - Number(left.createdAt || left.timestamp || 0))
+        .slice(0, 5);
+      return { category, items };
+    })
+    .filter((group) => group.items.length > 0);
+
+  const visibleCategoryGroups = selectedCategory === 'All'
+    ? groupedRecentThoughts
+    : groupedRecentThoughts.filter((group) => group.category === selectedCategory);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="border-b border-slate-800 px-6 py-4 flex justify-between items-center max-w-4xl w-full mx-auto">
-        <div className="flex items-center gap-2">
-          <Brain className="w-6 h-6 text-emerald-400" />
-          <h1 className="text-xl font-bold tracking-tight">MindVault</h1>
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand-block">
+          <div className="brand-icon">
+            <Brain size={22} />
+          </div>
+          <div>
+            <p className="eyebrow">Thought Organizer</p>
+            <h1>Capture ideas with calm clarity</h1>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <span className="text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full flex items-center gap-1.5">
-            {status === 'Syncing...' && <CloudLightning className="w-3 py-3 animate-pulse text-amber-400" />}
-            {status === 'Saved' && <CheckCircle className="w-3 h-3 text-emerald-400" />}
-            {status.includes('Offline') && <WifiOff className="w-3 h-3 text-slate-400" />}
+
+        <div className="header-actions">
+          <span className="status-pill">
+            {status === 'Syncing...' && <CloudLightning className="status-icon pulse" />}
+            {status === 'Saved' && <CheckCircle className="status-icon success" />}
+            {status.includes('Offline') && <WifiOff className="status-icon" />}
             {status}
           </span>
           {token ? (
-            <button onClick={handleLogout} className="text-slate-400 hover:text-rose-400 transition flex items-center gap-1 text-sm">
-              <LogOut className="w-4 h-4" /> Sign Out
+            <button type="button" className="action-link" onClick={handleLogout}>
+              <LogOut size={16} /> Sign out
             </button>
           ) : (
-            <button onClick={handleLogin} className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold px-4 py-1.5 rounded-lg transition text-sm">
+            <button type="button" className="primary-button" onClick={handleLogin}>
               Connect Google Drive
             </button>
           )}
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-2xl w-full mx-auto px-6 py-8 flex flex-col gap-8">
-        
-        {/* Quick Capture Input Box */}
-        <form onSubmit={handleSaveThought} className="relative bg-slate-800 rounded-xl border border-slate-700 shadow-xl focus-within:border-emerald-500 transition-colors duration-200">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="A thought sparks... type it here and press save"
-            className="w-full bg-transparent border-0 ring-0 outline-none focus:ring-0 p-4 min-h-[120px] resize-none placeholder-slate-500 text-lg text-slate-100"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSaveThought(e);
-              }
-            }}
-          />
-          <div className="flex justify-between items-center border-t border-slate-700/60 px-4 py-2.5 bg-slate-850 rounded-b-xl">
-            <span className="text-xs text-slate-500">Press <kbd className="bg-slate-700 px-1 rounded">Enter</kbd> to save quickly</span>
-            <button type="submit" className="bg-slate-700 hover:bg-emerald-500 hover:text-slate-950 text-emerald-400 p-2 rounded-lg transition-all flex items-center gap-2 text-sm font-medium">
-              <Save className="w-4 h-4" /> Capture
-            </button>
-          </div>
-        </form>
+      <main className="dashboard">
+        <section className="hero-panel">
+          <div className="capture-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">New thought</p>
+                <h2>Organize your reflections</h2>
+              </div>
+              <div className="chip">{thoughts.length} entries</div>
+            </div>
 
-        {/* Search & Timeline Filters */}
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search past thoughts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-700 transition"
-            />
-          </div>
+            <form className="entry-form" onSubmit={handleSaveThought}>
+              <label className="field">
+                <span>Subject</span>
+                <input
+                  value={formData.subject}
+                  onChange={(event) => setFormData((current) => ({ ...current, subject: event.target.value }))}
+                  placeholder="What sparked this thought?"
+                />
+              </label>
 
-          {/* Thought Timeline stream */}
-          <div className="space-y-3">
-            {filteredThoughts.length === 0 ? (
-              <p className="text-center text-slate-600 py-8 text-sm">No thoughts found. Start sketching your mind above.</p>
-            ) : (
-              filteredThoughts.map((thought) => (
-                <div key={thought.id} className="bg-slate-800/30 border border-slate-800/80 rounded-lg p-4 relative group hover:border-slate-700/60 transition">
-                  <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{thought.text}</p>
-                  <span className="block text-[10px] text-slate-500 mt-2">
-                    {new Date(thought.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                  </span>
+              <label className="field">
+                <span>Description</span>
+                <textarea
+                  rows="5"
+                  value={formData.description}
+                  onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="Add deeper notes, reflections, or context"
+                />
+              </label>
+
+              <div className="field-row">
+                <label className="field compact">
+                  <span>Category</span>
+                  <select
+                    value={formData.category}
+                    onChange={(event) => setFormData((current) => ({ ...current, category: event.target.value }))}
+                  >
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field compact">
+                  <span>Date</span>
+                  <input
+                    type="date"
+                    value={formData.entryDate}
+                    onChange={(event) => setFormData((current) => ({ ...current, entryDate: event.target.value }))}
+                  />
+                </label>
+              </div>
+
+              <div className="form-footer">
+                <label className="favorite-toggle">
+                  <input
+                    type="checkbox"
+                    checked={formData.favorite}
+                    onChange={(event) => setFormData((current) => ({ ...current, favorite: event.target.checked }))}
+                  />
+                  <Star size={16} /> Favorite
+                </label>
+
+                <button type="submit" className="primary-button save-button">
+                  <Save size={16} /> Save thought
+                </button>
+              </div>
+            </form>
+
+            <div className="category-builder">
+              <div className="section-heading small">
+                <div>
+                  <p className="eyebrow">Categories</p>
+                  <h3>Grow your organizing system</h3>
                 </div>
+              </div>
+              <div className="category-list">
+                {categories.map((category) => (
+                  <span key={category} className="category-pill">
+                    <Tag size={12} /> {category}
+                  </span>
+                ))}
+              </div>
+              <div className="category-inputs">
+                <input
+                  value={newCategoryName}
+                  onChange={(event) => setNewCategoryName(event.target.value)}
+                  placeholder="Add a category"
+                />
+                <button type="button" className="secondary-button" onClick={handleAddCategory}>
+                  <Plus size={14} /> Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="stats-card">
+            <div className="stat-row">
+              <div className="stat-icon">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <strong>{thoughts.length}</strong>
+                <span>Total thoughts</span>
+              </div>
+            </div>
+            <div className="stat-row">
+              <div className="stat-icon">
+                <Heart size={18} />
+              </div>
+              <div>
+                <strong>{favoriteCount}</strong>
+                <span>Favorites</span>
+              </div>
+            </div>
+            <div className="stat-row">
+              <div className="stat-icon">
+                <Tag size={18} />
+              </div>
+              <div>
+                <strong>{categories.length}</strong>
+                <span>Categories</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="library-panel">
+          <div className="toolbar">
+            <label className="search-box">
+              <Search size={16} />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search thoughts"
+              />
+            </label>
+
+            <div className="toolbar-controls">
+              <label className="filter-pill">
+                <Filter size={14} />
+                <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+                  <option value="All">All categories</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className={`toggle-pill ${favoritesOnly ? 'active' : ''}`} onClick={() => setFavoritesOnly((current) => !current)}>
+                <Star size={14} /> Favorites only
+              </button>
+            </div>
+          </div>
+
+          <div className="highlights-panel">
+            <div className="section-heading small">
+              <div>
+                <p className="eyebrow">Recent highlights</p>
+                <h3>Five fresh reflections per category</h3>
+              </div>
+              <div className="chip">{selectedCategory === 'All' ? `${groupedRecentThoughts.length} collections` : 'Focused view'}</div>
+            </div>
+
+            <div className="category-tabs" role="tablist" aria-label="Categories">
+              <button type="button" className={`tab-pill ${selectedCategory === 'All' ? 'active' : ''}`} onClick={() => setSelectedCategory('All')}>
+                All
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  className={`tab-pill ${selectedCategory === category ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  <Tag size={12} /> {category}
+                </button>
+              ))}
+            </div>
+
+            <div className="highlights-grid">
+              {visibleCategoryGroups.length === 0 ? (
+                <div className="empty-state subtle">
+                  <Sparkles size={18} />
+                  <p>Capture a few thoughts to see this gallery populate.</p>
+                </div>
+              ) : (
+                visibleCategoryGroups.map((group) => (
+                  <div key={group.category} className="highlight-column">
+                    <div className="highlight-column-header">
+                      <span>
+                        <Tag size={12} /> {group.category}
+                      </span>
+                      <span>{group.items.length} recent</span>
+                    </div>
+                    <div className="highlight-cards">
+                      {group.items.map((thought) => (
+                        <button key={thought.id} type="button" className="highlight-card" onClick={() => setSelectedThought(thought)}>
+                          <div className="highlight-card-meta">
+                            <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+                            {thought.favorite && <Heart size={12} />}
+                          </div>
+                          <strong>{thought.subject || 'Untitled thought'}</strong>
+                          <p>{summarizeText(thought.description, 92)}</p>
+                          <span className="highlight-card-footer">
+                            Open full view <ChevronRight size={14} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="thought-list">
+            {visibleThoughts.length === 0 ? (
+              <div className="empty-state">
+                <Sparkles size={18} />
+                <p>No thoughts match this view yet. Add your first note above.</p>
+              </div>
+            ) : (
+              visibleThoughts.map((thought) => (
+                <article key={thought.id} className={`thought-card ${thought.favorite ? 'favorite' : ''}`} onClick={() => setSelectedThought(thought)}>
+                  <div className="card-head">
+                    <div>
+                      <div className="thought-meta">
+                        <CalendarDays size={14} />
+                        <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+                      </div>
+                      <h3>{thought.subject || 'Untitled thought'}</h3>
+                    </div>
+                    <div className="card-actions">
+                      <button type="button" className="icon-button" onClick={(event) => {
+                        event.stopPropagation();
+                        toggleFavorite(thought.id);
+                      }} aria-label="favorite">
+                        <Star size={16} className={thought.favorite ? 'filled' : ''} />
+                      </button>
+                      <button type="button" className="icon-button" onClick={(event) => {
+                        event.stopPropagation();
+                        deleteThought(thought.id);
+                      }} aria-label="delete">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="thought-description">{summarizeText(thought.description, 164)}</p>
+                  <div className="thought-footer">
+                    <span className="category-pill soft">
+                      <Tag size={12} /> {thought.category || 'General'}
+                    </span>
+                    {thought.favorite && <span className="favorite-label"><Heart size={12} /> Favorite</span>}
+                  </div>
+                </article>
               ))
             )}
           </div>
-        </div>
+        </section>
       </main>
+
+      {selectedThought && (
+        <div className="preview-backdrop" role="dialog" aria-modal="true" onClick={() => setSelectedThought(null)}>
+          <div className="preview-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="preview-head">
+              <div>
+                <p className="eyebrow">Full screen preview</p>
+                <h3>{selectedThought.subject || 'Untitled thought'}</h3>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setSelectedThought(null)} aria-label="Close preview">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="preview-content">
+              <p className="preview-description">{selectedThought.description || 'No description added yet.'}</p>
+              <div className="preview-meta-list">
+                <div className="preview-meta-item">
+                  <span>Category</span>
+                  <strong>{selectedThought.category || 'General'}</strong>
+                </div>
+                <div className="preview-meta-item">
+                  <span>Captured</span>
+                  <strong>{formatDate(selectedThought.entryDate || selectedThought.createdAt || selectedThought.timestamp)}</strong>
+                </div>
+                <div className="preview-meta-item">
+                  <span>Favorite</span>
+                  <strong>{selectedThought.favorite ? 'Yes' : 'No'}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
