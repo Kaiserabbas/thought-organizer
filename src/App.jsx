@@ -19,6 +19,10 @@ import {
   Filter,
   X,
   ChevronRight,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
 } from 'lucide-react';
 
 // TODO: Replace with your actual client ID from Google Cloud Console
@@ -32,6 +36,7 @@ function makeBlankForm(categories) {
     category: categories[0] || DEFAULT_CATEGORIES[0],
     entryDate: new Date().toISOString().slice(0, 10),
     favorite: false,
+    descriptionAlign: 'left',
   };
 }
 
@@ -93,6 +98,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [activeView, setActiveView] = useState('home');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [status, setStatus] = useState('Ready');
   const [fileId, setFileId] = useState(null);
@@ -241,6 +247,7 @@ export default function App() {
       category: formData.category || categories[0] || DEFAULT_CATEGORIES[0],
       entryDate: formData.entryDate || new Date().toISOString().slice(0, 10),
       favorite: Boolean(formData.favorite),
+      descriptionAlign: formData.descriptionAlign || 'left',
       createdAt: Date.now(),
     };
 
@@ -269,8 +276,30 @@ export default function App() {
     }
   };
 
+  const deleteCategory = async (categoryName) => {
+    const nextCategories = categories.filter((category) => category !== categoryName);
+    const fallbackCategories = nextCategories.length ? nextCategories : DEFAULT_CATEGORIES;
+    const fallbackCategory = fallbackCategories[0] || 'General';
+    const updatedThoughts = thoughts.map((thought) => (
+      thought.category === categoryName ? { ...thought, category: fallbackCategory } : thought
+    ));
+
+    setCategories(fallbackCategories);
+    setThoughts(updatedThoughts);
+    if (selectedCategory === categoryName) {
+      setSelectedCategory('All');
+    }
+    setFormData((current) => ({ ...current, category: current.category === categoryName ? fallbackCategory : current.category }));
+    setStatus('Category removed');
+
+    if (token) {
+      await syncWithDrive(updatedThoughts, fallbackCategories);
+    }
+  };
+
   const toggleFavorite = (id) => {
     setThoughts((current) => current.map((thought) => (thought.id === id ? { ...thought, favorite: !thought.favorite } : thought)));
+    setSelectedThought((current) => (current?.id === id ? { ...current, favorite: !current.favorite } : current));
   };
 
   const deleteThought = (id) => {
@@ -296,7 +325,7 @@ export default function App() {
   };
   const groupedRecentThoughts = categories
     .map((category) => {
-      const items = thoughts
+      const items = visibleThoughts
         .filter((thought) => thought.category === category)
         .sort((left, right) => Number(right.createdAt || right.timestamp || 0) - Number(left.createdAt || left.timestamp || 0))
         .slice(0, 5);
@@ -340,9 +369,19 @@ export default function App() {
         </div>
       </header>
 
+      <div className="view-tabs" role="tablist" aria-label="Primary views">
+        <button type="button" className={`tab-pill ${activeView === 'home' ? 'active' : ''}`} onClick={() => setActiveView('home')}>
+          Home
+        </button>
+        <button type="button" className={`tab-pill ${activeView === 'collections' ? 'active' : ''}`} onClick={() => setActiveView('collections')}>
+          Collections
+        </button>
+      </div>
+
       <main className="dashboard">
-        <section className="hero-panel">
-          <div className="capture-card">
+        {activeView === 'home' ? (
+          <section className="hero-panel">
+            <div className="capture-card">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">New thought</p>
@@ -363,11 +402,26 @@ export default function App() {
 
               <label className="field">
                 <span>Description</span>
+                <div className="alignment-picker" role="toolbar" aria-label="Description alignment">
+                  <button type="button" className={`alignment-button ${formData.descriptionAlign === 'left' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'left' }))} aria-label="Align left">
+                    <AlignLeft size={14} />
+                  </button>
+                  <button type="button" className={`alignment-button ${formData.descriptionAlign === 'center' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'center' }))} aria-label="Align center">
+                    <AlignCenter size={14} />
+                  </button>
+                  <button type="button" className={`alignment-button ${formData.descriptionAlign === 'right' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'right' }))} aria-label="Align right">
+                    <AlignRight size={14} />
+                  </button>
+                  <button type="button" className={`alignment-button ${formData.descriptionAlign === 'justify' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'justify' }))} aria-label="Justify text">
+                    <AlignJustify size={14} />
+                  </button>
+                </div>
                 <textarea
                   rows="5"
                   value={formData.description}
                   onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))}
                   placeholder="Add deeper notes, reflections, or context"
+                  style={{ textAlign: formData.descriptionAlign || 'left', direction: formData.descriptionAlign === 'right' ? 'rtl' : 'ltr' }}
                 />
               </label>
 
@@ -423,6 +477,9 @@ export default function App() {
                 {categories.map((category) => (
                   <span key={category} className="category-pill">
                     <Tag size={12} /> {category}
+                    <button type="button" className="category-delete-button" onClick={() => deleteCategory(category)} aria-label={`Delete category ${category}`}>
+                      <Trash2 size={11} />
+                    </button>
                   </span>
                 ))}
               </div>
@@ -439,38 +496,38 @@ export default function App() {
             </div>
           </div>
 
-          <div className="stats-card">
-            <div className="stat-row">
-              <div className="stat-icon">
-                <Sparkles size={18} />
+            <div className="stats-card">
+              <div className="stat-row">
+                <div className="stat-icon">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <strong>{thoughts.length}</strong>
+                  <span>Total thoughts</span>
+                </div>
               </div>
-              <div>
-                <strong>{thoughts.length}</strong>
-                <span>Total thoughts</span>
+              <div className="stat-row">
+                <div className="stat-icon">
+                  <Heart size={18} />
+                </div>
+                <div>
+                  <strong>{favoriteCount}</strong>
+                  <span>Favorites</span>
+                </div>
+              </div>
+              <div className="stat-row">
+                <div className="stat-icon">
+                  <Tag size={18} />
+                </div>
+                <div>
+                  <strong>{categories.length}</strong>
+                  <span>Categories</span>
+                </div>
               </div>
             </div>
-            <div className="stat-row">
-              <div className="stat-icon">
-                <Heart size={18} />
-              </div>
-              <div>
-                <strong>{favoriteCount}</strong>
-                <span>Favorites</span>
-              </div>
-            </div>
-            <div className="stat-row">
-              <div className="stat-icon">
-                <Tag size={18} />
-              </div>
-              <div>
-                <strong>{categories.length}</strong>
-                <span>Categories</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="library-panel">
+          </section>
+        ) : (
+          <section className="library-panel">
           <div className="toolbar">
             <label className="search-box">
               <Search size={16} />
@@ -503,7 +560,6 @@ export default function App() {
             <div className="section-heading small">
               <div>
                 <p className="eyebrow">Recent highlights</p>
-                <h3>Five fresh reflections per category</h3>
               </div>
               <div className="chip">{selectedCategory === 'All' ? `${groupedRecentThoughts.length} collections` : 'Focused view'}</div>
             </div>
@@ -560,50 +616,51 @@ export default function App() {
             </div>
           </div>
 
-          <div className="thought-list">
-            {visibleThoughts.length === 0 ? (
-              <div className="empty-state">
-                <Sparkles size={18} />
-                <p>No thoughts match this view yet. Add your first note above.</p>
-              </div>
-            ) : (
-              visibleThoughts.map((thought) => (
-                <article key={thought.id} className={`thought-card ${thought.favorite ? 'favorite' : ''}`} onClick={() => setSelectedThought(thought)}>
-                  <div className="card-head">
-                    <div>
-                      <div className="thought-meta">
-                        <CalendarDays size={14} />
-                        <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+            <div className="thought-list">
+              {visibleThoughts.length === 0 ? (
+                <div className="empty-state">
+                  <Sparkles size={18} />
+                  <p>No thoughts match this view yet. Add your first note above.</p>
+                </div>
+              ) : (
+                visibleThoughts.map((thought) => (
+                  <article key={thought.id} className={`thought-card ${thought.favorite ? 'favorite' : ''}`} onClick={() => setSelectedThought(thought)}>
+                    <div className="card-head">
+                      <div>
+                        <div className="thought-meta">
+                          <CalendarDays size={14} />
+                          <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+                        </div>
+                        <h3>{thought.subject || 'Untitled thought'}</h3>
                       </div>
-                      <h3>{thought.subject || 'Untitled thought'}</h3>
+                      <div className="card-actions">
+                        <button type="button" className="icon-button" onClick={(event) => {
+                          event.stopPropagation();
+                          toggleFavorite(thought.id);
+                        }} aria-label="favorite">
+                          <Star size={16} className={thought.favorite ? 'filled' : ''} />
+                        </button>
+                        <button type="button" className="icon-button" onClick={(event) => {
+                          event.stopPropagation();
+                          deleteThought(thought.id);
+                        }} aria-label="delete">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="card-actions">
-                      <button type="button" className="icon-button" onClick={(event) => {
-                        event.stopPropagation();
-                        toggleFavorite(thought.id);
-                      }} aria-label="favorite">
-                        <Star size={16} className={thought.favorite ? 'filled' : ''} />
-                      </button>
-                      <button type="button" className="icon-button" onClick={(event) => {
-                        event.stopPropagation();
-                        deleteThought(thought.id);
-                      }} aria-label="delete">
-                        <Trash2 size={16} />
-                      </button>
+                    <p className="thought-description">{summarizeText(thought.description, 164)}</p>
+                    <div className="thought-footer">
+                      <span className="category-pill soft">
+                        <Tag size={12} /> {thought.category || 'General'}
+                      </span>
+                      {thought.favorite && <span className="favorite-label"><Heart size={12} /> Favorite</span>}
                     </div>
-                  </div>
-                  <p className="thought-description">{summarizeText(thought.description, 164)}</p>
-                  <div className="thought-footer">
-                    <span className="category-pill soft">
-                      <Tag size={12} /> {thought.category || 'General'}
-                    </span>
-                    {thought.favorite && <span className="favorite-label"><Heart size={12} /> Favorite</span>}
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        )}
       </main>
 
       {selectedThought && (
@@ -614,12 +671,28 @@ export default function App() {
                 <p className="eyebrow">Full screen preview</p>
                 <h3>{selectedThought.subject || 'Untitled thought'}</h3>
               </div>
-              <button type="button" className="icon-button" onClick={() => setSelectedThought(null)} aria-label="Close preview">
-                <X size={18} />
-              </button>
+              <div className="preview-actions">
+                <button type="button" className="icon-button" onClick={(event) => {
+                  event.stopPropagation();
+                  toggleFavorite(selectedThought.id);
+                }} aria-label="Toggle favorite in preview">
+                  <Star size={18} className={selectedThought.favorite ? 'filled' : ''} />
+                </button>
+                <button type="button" className="icon-button" onClick={(event) => {
+                  event.stopPropagation();
+                  deleteThought(selectedThought.id);
+                }} aria-label="Delete thought in preview">
+                  <Trash2 size={18} />
+                </button>
+                <button type="button" className="icon-button" onClick={() => setSelectedThought(null)} aria-label="Close preview">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div className="preview-content">
-              <p className="preview-description">{selectedThought.description || 'No description added yet.'}</p>
+              <p className="preview-description" style={{ textAlign: selectedThought.descriptionAlign || 'left', direction: selectedThought.descriptionAlign === 'right' ? 'rtl' : 'ltr' }}>
+                {selectedThought.description || 'No description added yet.'}
+              </p>
               <div className="preview-meta-list">
                 <div className="preview-meta-item">
                   <span>Category</span>

@@ -189,6 +189,14 @@ h1 {
   gap: 20px;
 }
 
+.view-tabs {
+  max-width: 1280px;
+  margin: 0 auto 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .hero-panel {
   display: grid;
   gap: 20px;
@@ -320,6 +328,44 @@ h1 {
 
 .category-pill.soft {
   background: rgba(103, 199, 255, 0.16);
+}
+
+.category-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  margin-left: 2px;
+  color: #ffb7b7;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.alignment-picker {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.alignment-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf4ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alignment-button.active {
+  background: rgba(121, 242, 190, 0.24);
+  border-color: rgba(142, 244, 194, 0.32);
+  color: #98f3ca;
 }
 
 .category-inputs {
@@ -646,6 +692,12 @@ h1 {
   justify-content: space-between;
   align-items: start;
   gap: 12px;
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .preview-content {
