@@ -1,7 +1,7 @@
 :root {
   color: #f4f7ff;
-  font-family: Inter, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.5;
+  font-family: 'Jameel Noori Regular', 'Jameel Noori Nastaleeq', Inter, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.75;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -369,6 +369,74 @@ h1 {
   gap: 14px;
 }
 
+.tab-switcher {
+  display: flex;
+  gap: 10px;
+  margin: 0 auto 16px;
+  max-width: 1280px;
+  width: 100%;
+}
+
+.collections-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.collections-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(8, 16, 32, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.collections-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.collection-card {
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(8, 16, 32, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  width: 250px;
+  gap: 12px;
+}
+
+.collection-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.collection-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  color: #8da4cc;
+  font-size: 0.82rem;
+}
+
+.collection-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -523,23 +591,30 @@ h1 {
 }
 
 .thought-list {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .thought-card {
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(140deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  padding: 16px;
+  border-radius: 24px;
+  border-left: 4px solid rgba(121, 242, 190, 0.65);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.thought-card:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .thought-card.favorite {
-  border-color: rgba(255, 232, 138, 0.45);
-  box-shadow: inset 0 0 0 1px rgba(255, 232, 138, 0.25);
+  border-color: rgba(255, 232, 138, 0.75);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .card-head {

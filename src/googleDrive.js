@@ -11,7 +11,13 @@ async function fetchFromDrive(url, token, options = {}) {
       ...options.headers,
     },
   });
-  if (!response.ok) throw new Error(`Google Drive API error: ${response.statusText}`);
+
+  if (!response.ok) {
+    const error = new Error(`Google Drive API error: ${response.status} ${response.statusText}`);
+    error.status = response.status;
+    throw error;
+  }
+
   return response.json();
 }
 
@@ -66,7 +72,14 @@ export const GoogleDriveService = {
     const response = await fetch(`${DRIVE_API_URL}/${fileId}?alt=media`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
-    if (!response.ok) return [];
+
+    if (!response.ok) {
+      if (response.status === 404) return [];
+      const error = new Error(`Google Drive API error: ${response.status} ${response.statusText}`);
+      error.status = response.status;
+      throw error;
+    }
+
     try {
       return await response.json();
     } catch {

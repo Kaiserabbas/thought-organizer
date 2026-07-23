@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleDriveService } from './googleDrive';
+import CollectionsView from './CollectionsView';
 import './App.css';
 import {
   Brain,
@@ -69,6 +70,11 @@ export default function App() {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('gdrive_token') || null;
   });
+  const [tokenExpiry, setTokenExpiry] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    const expiry = localStorage.getItem('gdrive_token_expires_at');
+    return expiry ? Number(expiry) : null;
+  });
   const [thoughts, setThoughts] = useState(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -93,6 +99,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
+  const [collectionSelectedCategory, setCollectionSelectedCategory] = useState('All');
+  const [collectionFavoritesOnly, setCollectionFavoritesOnly] = useState(false);
+  const [activeTab, setActiveTab] = useState('home');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [status, setStatus] = useState('Ready');
   const [fileId, setFileId] = useState(null);
@@ -128,8 +138,16 @@ export default function App() {
               setStatus('Auth Error');
               return;
             }
+
             localStorage.setItem('gdrive_token', response.access_token);
             setToken(response.access_token);
+
+            if (response.expires_in) {
+              const expiresAt = Date.now() + Number(response.expires_in) * 1000;
+              localStorage.setItem('gdrive_token_expires_at', String(expiresAt));
+              setTokenExpiry(expiresAt);
+            }
+
             setStatus('Connected');
           },
         });
@@ -163,8 +181,23 @@ export default function App() {
     return combined.length ? combined : DEFAULT_CATEGORIES;
   };
 
+  const isTokenExpired = () => tokenExpiry && Date.now() >= tokenExpiry;
+
+  const clearGoogleToken = () => {
+    localStorage.removeItem('gdrive_token');
+    localStorage.removeItem('gdrive_token_expires_at');
+    setToken(null);
+    setTokenExpiry(null);
+    setFileId(null);
+    setStatus('Auth expired');
+  };
+
   const syncWithDrive = async (currentThoughts = thoughts, currentCategories = categories) => {
-    if (!token) return;
+    if (!token || isTokenExpired()) {
+      clearGoogleToken();
+      return;
+    }
+
     setStatus('Syncing...');
     try {
       const folderId = await GoogleDriveService.getOrCreateFolder(token);
@@ -192,7 +225,12 @@ export default function App() {
       setStatus('Saved');
     } catch (error) {
       console.error(error);
-      setStatus('Sync Error');
+      if (error?.status === 401) {
+        clearGoogleToken();
+        setStatus('Auth expired');
+      } else {
+        setStatus('Sync Error');
+      }
     }
   };
 
@@ -223,7 +261,9 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('gdrive_token');
+    localStorage.removeItem('gdrive_token_expires_at');
     setToken(null);
+    setTokenExpiry(null);
     setFileId(null);
     setStatus('Idle');
   };
@@ -341,17 +381,42 @@ export default function App() {
       </header>
 
       <main className="dashboard">
-        <section className="hero-panel">
-          <div className="capture-card">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">New thought</p>
-                <h2>Organize your reflections</h2>
-              </div>
-              <div className="chip">{thoughts.length} entries</div>
-            </div>
+        <div className="tab-switcher" role="tablist" aria-label="Main sections">
+          <button type="button" className={`tab-pill ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
+            <Sparkles size={14} /> Add thought
+          </button>
+          <button type="button" className={`tab-pill ${activeTab === 'collections' ? 'active' : ''}`} onClick={() => setActiveTab('collections')}>
+            <Tag size={14} /> Collections
+          </button>
+        </div>
 
-            <form className="entry-form" onSubmit={handleSaveThought}>
+        {activeTab === 'collections' ? (
+          <CollectionsView
+            categories={categories}
+            thoughts={thoughts}
+            collectionSearchQuery={collectionSearchQuery}
+            setCollectionSearchQuery={setCollectionSearchQuery}
+            collectionSelectedCategory={collectionSelectedCategory}
+            setCollectionSelectedCategory={setCollectionSelectedCategory}
+            collectionFavoritesOnly={collectionFavoritesOnly}
+            setCollectionFavoritesOnly={setCollectionFavoritesOnly}
+            formatDate={formatDate}
+            summarizeText={summarizeText}
+            setSelectedThought={setSelectedThought}
+          />
+        ) : (
+          <>
+            <section className="hero-panel">
+              <div className="capture-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">New thought</p>
+                    <h2>Organize your reflections</h2>
+                  </div>
+                  <div className="chip">{thoughts.length} entries</div>
+                </div>
+
+                <form className="entry-form" onSubmit={handleSaveThought}>
               <label className="field">
                 <span>Subject</span>
                 <input
@@ -412,198 +477,200 @@ export default function App() {
               </div>
             </form>
 
-            <div className="category-builder">
-              <div className="section-heading small">
-                <div>
-                  <p className="eyebrow">Categories</p>
-                  <h3>Grow your organizing system</h3>
-                </div>
-              </div>
-              <div className="category-list">
-                {categories.map((category) => (
-                  <span key={category} className="category-pill">
-                    <Tag size={12} /> {category}
-                  </span>
-                ))}
-              </div>
-              <div className="category-inputs">
-                <input
-                  value={newCategoryName}
-                  onChange={(event) => setNewCategoryName(event.target.value)}
-                  placeholder="Add a category"
-                />
-                <button type="button" className="secondary-button" onClick={handleAddCategory}>
-                  <Plus size={14} /> Add
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="stats-card">
-            <div className="stat-row">
-              <div className="stat-icon">
-                <Sparkles size={18} />
-              </div>
-              <div>
-                <strong>{thoughts.length}</strong>
-                <span>Total thoughts</span>
-              </div>
-            </div>
-            <div className="stat-row">
-              <div className="stat-icon">
-                <Heart size={18} />
-              </div>
-              <div>
-                <strong>{favoriteCount}</strong>
-                <span>Favorites</span>
-              </div>
-            </div>
-            <div className="stat-row">
-              <div className="stat-icon">
-                <Tag size={18} />
-              </div>
-              <div>
-                <strong>{categories.length}</strong>
-                <span>Categories</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="library-panel">
-          <div className="toolbar">
-            <label className="search-box">
-              <Search size={16} />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search thoughts"
-              />
-            </label>
-
-            <div className="toolbar-controls">
-              <label className="filter-pill">
-                <Filter size={14} />
-                <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
-                  <option value="All">All categories</option>
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" className={`toggle-pill ${favoritesOnly ? 'active' : ''}`} onClick={() => setFavoritesOnly((current) => !current)}>
-                <Star size={14} /> Favorites only
-              </button>
-            </div>
-          </div>
-
-          <div className="highlights-panel">
-            <div className="section-heading small">
-              <div>
-                <p className="eyebrow">Recent highlights</p>
-                <h3>Five fresh reflections per category</h3>
-              </div>
-              <div className="chip">{selectedCategory === 'All' ? `${groupedRecentThoughts.length} collections` : 'Focused view'}</div>
-            </div>
-
-            <div className="category-tabs" role="tablist" aria-label="Categories">
-              <button type="button" className={`tab-pill ${selectedCategory === 'All' ? 'active' : ''}`} onClick={() => setSelectedCategory('All')}>
-                All
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  className={`tab-pill ${selectedCategory === category ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(category)}
-                >
-                  <Tag size={12} /> {category}
-                </button>
-              ))}
-            </div>
-
-            <div className="highlights-grid">
-              {visibleCategoryGroups.length === 0 ? (
-                <div className="empty-state subtle">
-                  <Sparkles size={18} />
-                  <p>Capture a few thoughts to see this gallery populate.</p>
-                </div>
-              ) : (
-                visibleCategoryGroups.map((group) => (
-                  <div key={group.category} className="highlight-column">
-                    <div className="highlight-column-header">
-                      <span>
-                        <Tag size={12} /> {group.category}
-                      </span>
-                      <span>{group.items.length} recent</span>
-                    </div>
-                    <div className="highlight-cards">
-                      {group.items.map((thought) => (
-                        <button key={thought.id} type="button" className="highlight-card" onClick={() => setSelectedThought(thought)}>
-                          <div className="highlight-card-meta">
-                            <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
-                            {thought.favorite && <Heart size={12} />}
-                          </div>
-                          <strong>{thought.subject || 'Untitled thought'}</strong>
-                          <p>{summarizeText(thought.description, 92)}</p>
-                          <span className="highlight-card-footer">
-                            Open full view <ChevronRight size={14} />
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="thought-list">
-            {visibleThoughts.length === 0 ? (
-              <div className="empty-state">
-                <Sparkles size={18} />
-                <p>No thoughts match this view yet. Add your first note above.</p>
-              </div>
-            ) : (
-              visibleThoughts.map((thought) => (
-                <article key={thought.id} className={`thought-card ${thought.favorite ? 'favorite' : ''}`} onClick={() => setSelectedThought(thought)}>
-                  <div className="card-head">
+                <div className="category-builder">
+                  <div className="section-heading small">
                     <div>
-                      <div className="thought-meta">
-                        <CalendarDays size={14} />
-                        <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+                      <p className="eyebrow">Categories</p>
+                      <h3>Grow your organizing system</h3>
+                    </div>
+                  </div>
+                  <div className="category-list">
+                    {categories.map((category) => (
+                      <span key={category} className="category-pill">
+                        <Tag size={12} /> {category}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="category-inputs">
+                    <input
+                      value={newCategoryName}
+                      onChange={(event) => setNewCategoryName(event.target.value)}
+                      placeholder="Add a category"
+                    />
+                    <button type="button" className="secondary-button" onClick={handleAddCategory}>
+                      <Plus size={14} /> Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="stats-card">
+                <div className="stat-row">
+                  <div className="stat-icon">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <strong>{thoughts.length}</strong>
+                    <span>Total thoughts</span>
+                  </div>
+                </div>
+                <div className="stat-row">
+                  <div className="stat-icon">
+                    <Heart size={18} />
+                  </div>
+                  <div>
+                    <strong>{favoriteCount}</strong>
+                    <span>Favorites</span>
+                  </div>
+                </div>
+                <div className="stat-row">
+                  <div className="stat-icon">
+                    <Tag size={18} />
+                  </div>
+                  <div>
+                    <strong>{categories.length}</strong>
+                    <span>Categories</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="library-panel">
+              <div className="toolbar">
+                <label className="search-box">
+                  <Search size={16} />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search thoughts"
+                  />
+                </label>
+
+                <div className="toolbar-controls">
+                  <label className="filter-pill">
+                    <Filter size={14} />
+                    <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+                      <option value="All">All categories</option>
+                      {categories.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className={`toggle-pill ${favoritesOnly ? 'active' : ''}`} onClick={() => setFavoritesOnly((current) => !current)}>
+                    <Star size={14} /> Favorites only
+                  </button>
+                </div>
+              </div>
+
+              <div className="highlights-panel">
+                <div className="section-heading small">
+                  <div>
+                    <p className="eyebrow">Recent highlights</p>
+                    <h3>Five fresh reflections per category</h3>
+                  </div>
+                  <div className="chip">{selectedCategory === 'All' ? `${groupedRecentThoughts.length} collections` : 'Focused view'}</div>
+                </div>
+
+                <div className="category-tabs" role="tablist" aria-label="Categories">
+                  <button type="button" className={`tab-pill ${selectedCategory === 'All' ? 'active' : ''}`} onClick={() => setSelectedCategory('All')}>
+                    All
+                  </button>
+                  {categories.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      className={`tab-pill ${selectedCategory === category ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory(category)}
+                    >
+                      <Tag size={12} /> {category}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="highlights-grid">
+                  {visibleCategoryGroups.length === 0 ? (
+                    <div className="empty-state subtle">
+                      <Sparkles size={18} />
+                      <p>Capture a few thoughts to see this gallery populate.</p>
+                    </div>
+                  ) : (
+                    visibleCategoryGroups.map((group) => (
+                      <div key={group.category} className="highlight-column">
+                        <div className="highlight-column-header">
+                          <span>
+                            <Tag size={12} /> {group.category}
+                          </span>
+                          <span>{group.items.length} recent</span>
+                        </div>
+                        <div className="highlight-cards">
+                          {group.items.map((thought) => (
+                            <button key={thought.id} type="button" className="highlight-card" onClick={() => setSelectedThought(thought)}>
+                              <div className="highlight-card-meta">
+                                <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+                                {thought.favorite && <Heart size={12} />}
+                              </div>
+                              <strong>{thought.subject || 'Untitled thought'}</strong>
+                              <p>{summarizeText(thought.description, 92)}</p>
+                              <span className="highlight-card-footer">
+                                Open full view <ChevronRight size={14} />
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <h3>{thought.subject || 'Untitled thought'}</h3>
-                    </div>
-                    <div className="card-actions">
-                      <button type="button" className="icon-button" onClick={(event) => {
-                        event.stopPropagation();
-                        toggleFavorite(thought.id);
-                      }} aria-label="favorite">
-                        <Star size={16} className={thought.favorite ? 'filled' : ''} />
-                      </button>
-                      <button type="button" className="icon-button" onClick={(event) => {
-                        event.stopPropagation();
-                        deleteThought(thought.id);
-                      }} aria-label="delete">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="thought-list">
+                {visibleThoughts.length === 0 ? (
+                  <div className="empty-state">
+                    <Sparkles size={18} />
+                    <p>No thoughts match this view yet. Add your first note above.</p>
                   </div>
-                  <p className="thought-description">{summarizeText(thought.description, 164)}</p>
-                  <div className="thought-footer">
-                    <span className="category-pill soft">
-                      <Tag size={12} /> {thought.category || 'General'}
-                    </span>
-                    {thought.favorite && <span className="favorite-label"><Heart size={12} /> Favorite</span>}
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
+                ) : (
+                  visibleThoughts.map((thought) => (
+                    <article key={thought.id} className={`thought-card ${thought.favorite ? 'favorite' : ''}`} onClick={() => setSelectedThought(thought)}>
+                      <div className="card-head">
+                        <div>
+                          <div className="thought-meta">
+                            <CalendarDays size={14} />
+                            <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
+                          </div>
+                          <h3>{thought.subject || 'Untitled thought'}</h3>
+                        </div>
+                        <div className="card-actions">
+                          <button type="button" className="icon-button" onClick={(event) => {
+                            event.stopPropagation();
+                            toggleFavorite(thought.id);
+                          }} aria-label="favorite">
+                            <Star size={16} className={thought.favorite ? 'filled' : ''} />
+                          </button>
+                          <button type="button" className="icon-button" onClick={(event) => {
+                            event.stopPropagation();
+                            deleteThought(thought.id);
+                          }} aria-label="delete">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="thought-description">{summarizeText(thought.description, 164)}</p>
+                      <div className="thought-footer">
+                        <span className="category-pill soft">
+                          <Tag size={12} /> {thought.category || 'General'}
+                        </span>
+                        {thought.favorite && <span className="favorite-label"><Heart size={12} /> Favorite</span>}
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+          </>
+        )}
       </main>
 
       {selectedThought && (
