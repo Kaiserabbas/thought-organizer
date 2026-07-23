@@ -104,6 +104,9 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
+  const [collectionSelectedCategory, setCollectionSelectedCategory] = useState('All');
+  const [collectionFavoritesOnly, setCollectionFavoritesOnly] = useState(false);
   const [activeView, setActiveView] = useState('home');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [status, setStatus] = useState('Ready');
