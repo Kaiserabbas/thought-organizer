@@ -20,6 +20,10 @@ import {
   Filter,
   X,
   ChevronRight,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
 } from 'lucide-react';
 
 // TODO: Replace with your actual client ID from Google Cloud Console
@@ -33,6 +37,7 @@ function makeBlankForm(categories) {
     category: categories[0] || DEFAULT_CATEGORIES[0],
     entryDate: new Date().toISOString().slice(0, 10),
     favorite: false,
+    descriptionAlign: 'left',
   };
 }
 
@@ -99,10 +104,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
-  const [collectionSelectedCategory, setCollectionSelectedCategory] = useState('All');
-  const [collectionFavoritesOnly, setCollectionFavoritesOnly] = useState(false);
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeView, setActiveView] = useState('home');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [status, setStatus] = useState('Ready');
   const [fileId, setFileId] = useState(null);
@@ -281,6 +283,7 @@ export default function App() {
       category: formData.category || categories[0] || DEFAULT_CATEGORIES[0],
       entryDate: formData.entryDate || new Date().toISOString().slice(0, 10),
       favorite: Boolean(formData.favorite),
+      descriptionAlign: formData.descriptionAlign || 'left',
       createdAt: Date.now(),
     };
 
@@ -309,8 +312,30 @@ export default function App() {
     }
   };
 
+  const deleteCategory = async (categoryName) => {
+    const nextCategories = categories.filter((category) => category !== categoryName);
+    const fallbackCategories = nextCategories.length ? nextCategories : DEFAULT_CATEGORIES;
+    const fallbackCategory = fallbackCategories[0] || 'General';
+    const updatedThoughts = thoughts.map((thought) => (
+      thought.category === categoryName ? { ...thought, category: fallbackCategory } : thought
+    ));
+
+    setCategories(fallbackCategories);
+    setThoughts(updatedThoughts);
+    if (selectedCategory === categoryName) {
+      setSelectedCategory('All');
+    }
+    setFormData((current) => ({ ...current, category: current.category === categoryName ? fallbackCategory : current.category }));
+    setStatus('Category removed');
+
+    if (token) {
+      await syncWithDrive(updatedThoughts, fallbackCategories);
+    }
+  };
+
   const toggleFavorite = (id) => {
     setThoughts((current) => current.map((thought) => (thought.id === id ? { ...thought, favorite: !thought.favorite } : thought)));
+    setSelectedThought((current) => (current?.id === id ? { ...current, favorite: !current.favorite } : current));
   };
 
   const deleteThought = (id) => {
@@ -336,7 +361,7 @@ export default function App() {
   };
   const groupedRecentThoughts = categories
     .map((category) => {
-      const items = thoughts
+      const items = visibleThoughts
         .filter((thought) => thought.category === category)
         .sort((left, right) => Number(right.createdAt || right.timestamp || 0) - Number(left.createdAt || left.timestamp || 0))
         .slice(0, 5);
@@ -380,31 +405,17 @@ export default function App() {
         </div>
       </header>
 
-      <main className="dashboard">
-        <div className="tab-switcher" role="tablist" aria-label="Main sections">
-          <button type="button" className={`tab-pill ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
-            <Sparkles size={14} /> Add thought
-          </button>
-          <button type="button" className={`tab-pill ${activeTab === 'collections' ? 'active' : ''}`} onClick={() => setActiveTab('collections')}>
-            <Tag size={14} /> Collections
-          </button>
-        </div>
+      <div className="view-tabs" role="tablist" aria-label="Primary views">
+        <button type="button" className={`tab-pill ${activeView === 'home' ? 'active' : ''}`} onClick={() => setActiveView('home')}>
+          Home
+        </button>
+        <button type="button" className={`tab-pill ${activeView === 'collections' ? 'active' : ''}`} onClick={() => setActiveView('collections')}>
+          Collections
+        </button>
+      </div>
 
-        {activeTab === 'collections' ? (
-          <CollectionsView
-            categories={categories}
-            thoughts={thoughts}
-            collectionSearchQuery={collectionSearchQuery}
-            setCollectionSearchQuery={setCollectionSearchQuery}
-            collectionSelectedCategory={collectionSelectedCategory}
-            setCollectionSelectedCategory={setCollectionSelectedCategory}
-            collectionFavoritesOnly={collectionFavoritesOnly}
-            setCollectionFavoritesOnly={setCollectionFavoritesOnly}
-            formatDate={formatDate}
-            summarizeText={summarizeText}
-            setSelectedThought={setSelectedThought}
-          />
-        ) : (
+      <main className="dashboard">
+        {activeView === 'home' ? (
           <>
             <section className="hero-panel">
               <div className="capture-card">
@@ -417,65 +428,80 @@ export default function App() {
                 </div>
 
                 <form className="entry-form" onSubmit={handleSaveThought}>
-              <label className="field">
-                <span>Subject</span>
-                <input
-                  value={formData.subject}
-                  onChange={(event) => setFormData((current) => ({ ...current, subject: event.target.value }))}
-                  placeholder="What sparked this thought?"
-                />
-              </label>
+                  <label className="field">
+                    <span>Subject</span>
+                    <input
+                      value={formData.subject}
+                      onChange={(event) => setFormData((current) => ({ ...current, subject: event.target.value }))}
+                      placeholder="What sparked this thought?"
+                    />
+                  </label>
 
-              <label className="field">
-                <span>Description</span>
-                <textarea
-                  rows="5"
-                  value={formData.description}
-                  onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="Add deeper notes, reflections, or context"
-                />
-              </label>
+                  <label className="field">
+                    <span>Description</span>
+                    <div className="alignment-picker" role="toolbar" aria-label="Description alignment">
+                      <button type="button" className={`alignment-button ${formData.descriptionAlign === 'left' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'left' }))} aria-label="Align left">
+                        <AlignLeft size={14} />
+                      </button>
+                      <button type="button" className={`alignment-button ${formData.descriptionAlign === 'center' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'center' }))} aria-label="Align center">
+                        <AlignCenter size={14} />
+                      </button>
+                      <button type="button" className={`alignment-button ${formData.descriptionAlign === 'right' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'right' }))} aria-label="Align right">
+                        <AlignRight size={14} />
+                      </button>
+                      <button type="button" className={`alignment-button ${formData.descriptionAlign === 'justify' ? 'active' : ''}`} onClick={() => setFormData((current) => ({ ...current, descriptionAlign: 'justify' }))} aria-label="Justify text">
+                        <AlignJustify size={14} />
+                      </button>
+                    </div>
+                    <textarea
+                      rows="5"
+                      value={formData.description}
+                      onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="Add deeper notes, reflections, or context"
+                      style={{ textAlign: formData.descriptionAlign || 'left', direction: formData.descriptionAlign === 'right' ? 'rtl' : 'ltr' }}
+                    />
+                  </label>
 
-              <div className="field-row">
-                <label className="field compact">
-                  <span>Category</span>
-                  <select
-                    value={formData.category}
-                    onChange={(event) => setFormData((current) => ({ ...current, category: event.target.value }))}
-                  >
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <div className="field-row">
+                    <label className="field compact">
+                      <span>Category</span>
+                      <select
+                        value={formData.category}
+                        onChange={(event) => setFormData((current) => ({ ...current, category: event.target.value }))}
+                      >
+                        {categories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="field compact">
-                  <span>Date</span>
-                  <input
-                    type="date"
-                    value={formData.entryDate}
-                    onChange={(event) => setFormData((current) => ({ ...current, entryDate: event.target.value }))}
-                  />
-                </label>
-              </div>
+                    <label className="field compact">
+                      <span>Date</span>
+                      <input
+                        type="date"
+                        value={formData.entryDate}
+                        onChange={(event) => setFormData((current) => ({ ...current, entryDate: event.target.value }))}
+                      />
+                    </label>
+                  </div>
 
-              <div className="form-footer">
-                <label className="favorite-toggle">
-                  <input
-                    type="checkbox"
-                    checked={formData.favorite}
-                    onChange={(event) => setFormData((current) => ({ ...current, favorite: event.target.checked }))}
-                  />
-                  <Star size={16} /> Favorite
-                </label>
+                  <div className="form-footer">
+                    <label className="favorite-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.favorite}
+                        onChange={(event) => setFormData((current) => ({ ...current, favorite: event.target.checked }))}
+                      />
+                      <Star size={16} /> Favorite
+                    </label>
 
-                <button type="submit" className="primary-button save-button">
-                  <Save size={16} /> Save thought
-                </button>
-              </div>
-            </form>
+                    <button type="submit" className="primary-button save-button">
+                      <Save size={16} /> Save thought
+                    </button>
+                  </div>
+                </form>
 
                 <div className="category-builder">
                   <div className="section-heading small">
@@ -488,6 +514,9 @@ export default function App() {
                     {categories.map((category) => (
                       <span key={category} className="category-pill">
                         <Tag size={12} /> {category}
+                        <button type="button" className="category-delete-button" onClick={() => deleteCategory(category)} aria-label={`Delete category ${category}`}>
+                          <Trash2 size={11} />
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -534,145 +563,23 @@ export default function App() {
                 </div>
               </div>
             </section>
-
-            <section className="library-panel">
-              <div className="toolbar">
-                <label className="search-box">
-                  <Search size={16} />
-                  <input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search thoughts"
-                  />
-                </label>
-
-                <div className="toolbar-controls">
-                  <label className="filter-pill">
-                    <Filter size={14} />
-                    <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
-                      <option value="All">All categories</option>
-                      {categories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="button" className={`toggle-pill ${favoritesOnly ? 'active' : ''}`} onClick={() => setFavoritesOnly((current) => !current)}>
-                    <Star size={14} /> Favorites only
-                  </button>
-                </div>
-              </div>
-
-              <div className="highlights-panel">
-                <div className="section-heading small">
-                  <div>
-                    <p className="eyebrow">Recent highlights</p>
-                    <h3>Five fresh reflections per category</h3>
-                  </div>
-                  <div className="chip">{selectedCategory === 'All' ? `${groupedRecentThoughts.length} collections` : 'Focused view'}</div>
-                </div>
-
-                <div className="category-tabs" role="tablist" aria-label="Categories">
-                  <button type="button" className={`tab-pill ${selectedCategory === 'All' ? 'active' : ''}`} onClick={() => setSelectedCategory('All')}>
-                    All
-                  </button>
-                  {categories.map((category) => (
-                    <button
-                      key={category}
-                      type="button"
-                      className={`tab-pill ${selectedCategory === category ? 'active' : ''}`}
-                      onClick={() => setSelectedCategory(category)}
-                    >
-                      <Tag size={12} /> {category}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="highlights-grid">
-                  {visibleCategoryGroups.length === 0 ? (
-                    <div className="empty-state subtle">
-                      <Sparkles size={18} />
-                      <p>Capture a few thoughts to see this gallery populate.</p>
-                    </div>
-                  ) : (
-                    visibleCategoryGroups.map((group) => (
-                      <div key={group.category} className="highlight-column">
-                        <div className="highlight-column-header">
-                          <span>
-                            <Tag size={12} /> {group.category}
-                          </span>
-                          <span>{group.items.length} recent</span>
-                        </div>
-                        <div className="highlight-cards">
-                          {group.items.map((thought) => (
-                            <button key={thought.id} type="button" className="highlight-card" onClick={() => setSelectedThought(thought)}>
-                              <div className="highlight-card-meta">
-                                <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
-                                {thought.favorite && <Heart size={12} />}
-                              </div>
-                              <strong>{thought.subject || 'Untitled thought'}</strong>
-                              <p>{summarizeText(thought.description, 92)}</p>
-                              <span className="highlight-card-footer">
-                                Open full view <ChevronRight size={14} />
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="thought-list">
-                {visibleThoughts.length === 0 ? (
-                  <div className="empty-state">
-                    <Sparkles size={18} />
-                    <p>No thoughts match this view yet. Add your first note above.</p>
-                  </div>
-                ) : (
-                  visibleThoughts.map((thought) => (
-                    <article key={thought.id} className={`thought-card ${thought.favorite ? 'favorite' : ''}`} onClick={() => setSelectedThought(thought)}>
-                      <div className="card-head">
-                        <div>
-                          <div className="thought-meta">
-                            <CalendarDays size={14} />
-                            <span>{formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}</span>
-                          </div>
-                          <h3>{thought.subject || 'Untitled thought'}</h3>
-                        </div>
-                        <div className="card-actions">
-                          <button type="button" className="icon-button" onClick={(event) => {
-                            event.stopPropagation();
-                            toggleFavorite(thought.id);
-                          }} aria-label="favorite">
-                            <Star size={16} className={thought.favorite ? 'filled' : ''} />
-                          </button>
-                          <button type="button" className="icon-button" onClick={(event) => {
-                            event.stopPropagation();
-                            deleteThought(thought.id);
-                          }} aria-label="delete">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="thought-description">{summarizeText(thought.description, 164)}</p>
-                      <div className="thought-footer">
-                        <span className="category-pill soft">
-                          <Tag size={12} /> {thought.category || 'General'}
-                        </span>
-                        {thought.favorite && <span className="favorite-label"><Heart size={12} /> Favorite</span>}
-                      </div>
-                    </article>
-                  ))
-                )}
-              </div>
-            </section>
           </>
+        ) : (
+          <CollectionsView
+            categories={categories}
+            thoughts={thoughts}
+            collectionSearchQuery={collectionSearchQuery}
+            setCollectionSearchQuery={setCollectionSearchQuery}
+            collectionSelectedCategory={collectionSelectedCategory}
+            setCollectionSelectedCategory={setCollectionSelectedCategory}
+            collectionFavoritesOnly={collectionFavoritesOnly}
+            setCollectionFavoritesOnly={setCollectionFavoritesOnly}
+            formatDate={formatDate}
+            summarizeText={summarizeText}
+            setSelectedThought={setSelectedThought}
+          />
         )}
       </main>
-
       {selectedThought && (
         <div className="preview-backdrop" role="dialog" aria-modal="true" onClick={() => setSelectedThought(null)}>
           <div className="preview-panel" onClick={(event) => event.stopPropagation()}>
@@ -681,12 +588,28 @@ export default function App() {
                 <p className="eyebrow">Full screen preview</p>
                 <h3>{selectedThought.subject || 'Untitled thought'}</h3>
               </div>
-              <button type="button" className="icon-button" onClick={() => setSelectedThought(null)} aria-label="Close preview">
-                <X size={18} />
-              </button>
+              <div className="preview-actions">
+                <button type="button" className="icon-button" onClick={(event) => {
+                  event.stopPropagation();
+                  toggleFavorite(selectedThought.id);
+                }} aria-label="Toggle favorite in preview">
+                  <Star size={18} className={selectedThought.favorite ? 'filled' : ''} />
+                </button>
+                <button type="button" className="icon-button" onClick={(event) => {
+                  event.stopPropagation();
+                  deleteThought(selectedThought.id);
+                }} aria-label="Delete thought in preview">
+                  <Trash2 size={18} />
+                </button>
+                <button type="button" className="icon-button" onClick={() => setSelectedThought(null)} aria-label="Close preview">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div className="preview-content">
-              <p className="preview-description">{selectedThought.description || 'No description added yet.'}</p>
+              <p className="preview-description" style={{ textAlign: selectedThought.descriptionAlign || 'left', direction: selectedThought.descriptionAlign === 'right' ? 'rtl' : 'ltr' }}>
+                {selectedThought.description || 'No description added yet.'}
+              </p>
               <div className="preview-meta-list">
                 <div className="preview-meta-item">
                   <span>Category</span>
