@@ -1,4 +1,15 @@
-import { Search, Filter, Star, Sparkles, Tag, Heart, ChevronRight, CalendarDays } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarDays,
+  ChevronLeft,
+  Filter,
+  Heart,
+  Plus,
+  Search,
+  Sparkles,
+  Star,
+  Tag,
+} from 'lucide-react';
 
 export default function CollectionsView({
   categories,
@@ -12,12 +23,22 @@ export default function CollectionsView({
   formatDate,
   summarizeText,
   setSelectedThought,
+  onAddThought,
 }) {
+  const normalizedQuery = collectionSearchQuery.trim().toLowerCase();
+  const visibleThoughts = [...thoughts]
+    .sort((left, right) => Number(right.createdAt || right.timestamp || 0) - Number(left.createdAt || left.timestamp || 0))
+    .filter((thought) => {
+      const haystack = `${thought.subject} ${thought.description} ${thought.category}`.toLowerCase();
+      const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
+      const matchesCategory = collectionSelectedCategory === 'All' || thought.category === collectionSelectedCategory;
+      const matchesFavorite = !collectionFavoritesOnly || thought.favorite;
+      return matchesQuery && matchesCategory && matchesFavorite;
+    });
+
   const groupedCollections = categories
     .map((category) => {
-      const items = thoughts
-        .filter((thought) => thought.category === category)
-        .sort((left, right) => Number(right.createdAt || right.timestamp || 0) - Number(left.createdAt || left.timestamp || 0));
+      const items = visibleThoughts.filter((thought) => thought.category === category);
 
       return {
         category,
@@ -27,23 +48,51 @@ export default function CollectionsView({
     })
     .filter((group) => group.items.length > 0);
 
-  const visibleCollections = groupedCollections.filter((group) => {
-    const haystack = `${group.category} ${group.items.map((thought) => `${thought.subject} ${thought.description}`).join(' ')}`.toLowerCase();
-    const matchesQuery = haystack.includes(collectionSearchQuery.toLowerCase());
-    const matchesCategory = collectionSelectedCategory === 'All' || group.category === collectionSelectedCategory;
-    const matchesFavorite = !collectionFavoritesOnly || group.favoriteCount > 0;
-    return matchesQuery && matchesCategory && matchesFavorite;
-  });
+  const featuredThoughts = visibleThoughts.slice(0, 5);
+  const totalFavorites = thoughts.filter((thought) => thought.favorite).length;
+
+  const renderThoughtCard = (thought, className = 'article-card', excerptLength = 92) => (
+    <button key={thought.id} type="button" className={className} onClick={() => setSelectedThought(thought)}>
+      <span className="article-meta">
+        <CalendarDays size={13} /> {formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}
+        {thought.favorite && <Heart size={13} className="favorite-mark" />}
+      </span>
+      <strong>{thought.subject || 'Untitled thought'}</strong>
+      <p>{summarizeText(thought.description, excerptLength)}</p>
+      <span className="article-open">
+        Open full view <ChevronLeft size={14} />
+      </span>
+    </button>
+  );
 
   return (
     <section className="collections-page">
+      <div className="collections-heading">
+        <div>
+          <p className="eyebrow">Home</p>
+          <h2>Thought collections</h2>
+        </div>
+        <div className="collection-counts" aria-label="Collection counts">
+          <span>
+            <BookOpen size={15} /> {thoughts.length} thoughts
+          </span>
+          <span>
+            <Tag size={15} /> {categories.length} collections
+          </span>
+          <span>
+            <Heart size={15} /> {totalFavorites} favorites
+          </span>
+        </div>
+      </div>
+
       <div className="collections-toolbar">
         <label className="search-box">
           <Search size={16} />
           <input
             value={collectionSearchQuery}
             onChange={(event) => setCollectionSearchQuery(event.target.value)}
-            placeholder="Search collections"
+            placeholder="Search thoughts"
+            dir="auto"
           />
         </label>
 
@@ -69,51 +118,53 @@ export default function CollectionsView({
         </div>
       </div>
 
-      <div className="collections-grid">
-        {visibleCollections.length === 0 ? (
-          <div className="empty-state subtle">
-            <Sparkles size={18} />
-            <p>No collections match this view yet.</p>
-          </div>
-        ) : (
-          visibleCollections.map((group) => (
-            <article key={group.category} className="collection-card">
-              <div className="collection-card-header">
-                <div>
-                  <p className="eyebrow">Collection</p>
-                  <h3>{group.category}</h3>
+      {thoughts.length === 0 ? (
+        <div className="empty-state">
+          <Sparkles size={20} />
+          <p>No thoughts saved yet.</p>
+          <button type="button" className="secondary-button" onClick={onAddThought}>
+            <Plus size={14} /> Add Thought
+          </button>
+        </div>
+      ) : visibleThoughts.length === 0 ? (
+        <div className="empty-state">
+          <Search size={20} />
+          <p>No thoughts match this view.</p>
+        </div>
+      ) : (
+        <>
+          <section className="featured-section">
+            <div className="section-title-row">
+              <h2>Featured thoughts</h2>
+              <span>{featuredThoughts.length} latest</span>
+            </div>
+            <div className="featured-grid">
+              {featuredThoughts.map((thought, index) => renderThoughtCard(
+                thought,
+                index === 0 ? 'article-card feature-card-large' : 'article-card feature-card',
+                index === 0 ? 180 : 86,
+              ))}
+            </div>
+          </section>
+
+          <div className="collection-section-grid">
+            {groupedCollections.map((group) => (
+              <section key={group.category} className="collection-section">
+                <div className="collection-title-row">
+                  <h2>{group.category}</h2>
+                  <span>
+                    {group.items.length} thoughts
+                    {group.favoriteCount > 0 ? ` / ${group.favoriteCount} favorites` : ''}
+                  </span>
                 </div>
-                <div className="chip">{group.items.length} notes</div>
-              </div>
-
-              <div className="collection-summary-row">
-                <span>
-                  <Tag size={12} /> {group.category}
-                </span>
-                <span>{group.favoriteCount} favorites</span>
-              </div>
-
-              <div className="collection-preview-list">
-                {group.items.slice(0, 3).map((thought) => (
-                  <button key={thought.id} type="button" className="highlight-card" onClick={() => setSelectedThought(thought)}>
-                    <div className="highlight-card-meta">
-                      <span>
-                        <CalendarDays size={12} /> {formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}
-                      </span>
-                      {thought.favorite && <Heart size={12} />}
-                    </div>
-                    <strong>{thought.subject || 'Untitled thought'}</strong>
-                    <p>{summarizeText(thought.description, 88)}</p>
-                    <span className="highlight-card-footer">
-                      Open full view <ChevronRight size={14} />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </article>
-          ))
-        )}
-      </div>
+                <div className="article-grid">
+                  {group.items.slice(0, 4).map((thought) => renderThoughtCard(thought))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }

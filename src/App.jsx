@@ -1,32 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { GoogleDriveService } from './googleDrive';
 import CollectionsView from './CollectionsView';
 import './App.css';
 import {
-  Brain,
-  CloudLightning,
-  Save,
-  Search,
-  LogOut,
-  CheckCircle,
-  WifiOff,
-  Star,
-  Plus,
-  CalendarDays,
-  Sparkles,
-  Tag,
-  Heart,
-  Trash2,
-  Filter,
-  X,
-  ChevronRight,
-  AlignLeft,
   AlignCenter,
-  AlignRight,
   AlignJustify,
+  AlignLeft,
+  AlignRight,
+  BookOpen,
+  Brain,
+  CheckCircle,
+  CloudLightning,
+  FilePlus2,
+  Heart,
+  LogOut,
+  Pencil,
+  Plus,
+  Save,
+  Sparkles,
+  Star,
+  Tag,
+  Trash2,
+  WifiOff,
+  X,
 } from 'lucide-react';
 
-// TODO: Replace with your actual client ID from Google Cloud Console
 const CLIENT_ID = '574535920766-ntjn0mr37h07sd3l1n5c3o2j4na7bqok.apps.googleusercontent.com';
 const DEFAULT_CATEGORIES = ['Political', 'Religious', 'Poetry', 'Economics'];
 
@@ -37,7 +35,18 @@ function makeBlankForm(categories) {
     category: categories[0] || DEFAULT_CATEGORIES[0],
     entryDate: new Date().toISOString().slice(0, 10),
     favorite: false,
-    descriptionAlign: 'left',
+    descriptionAlign: 'right',
+  };
+}
+
+function makeEditForm(thought, categories) {
+  return {
+    subject: thought?.subject || '',
+    description: thought?.description || '',
+    category: thought?.category || categories[0] || DEFAULT_CATEGORIES[0],
+    entryDate: String(thought?.entryDate || new Date().toISOString().slice(0, 10)).slice(0, 10),
+    favorite: Boolean(thought?.favorite),
+    descriptionAlign: thought?.descriptionAlign || 'right',
   };
 }
 
@@ -68,6 +77,22 @@ function formatDate(value) {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function mergeThoughts(local, remote) {
+  const map = new Map();
+  (remote || []).forEach((thought) => map.set(thought.id, thought));
+  (local || []).forEach((thought) => map.set(thought.id, thought));
+  return Array.from(map.values()).sort((left, right) => {
+    const leftTime = Number(left.createdAt || left.timestamp || 0);
+    const rightTime = Number(right.createdAt || right.timestamp || 0);
+    return rightTime - leftTime;
+  });
+}
+
+function mergeCategories(local, remote) {
+  const combined = [...new Set([...(remote || []), ...(local || [])].filter(Boolean))];
+  return combined.length ? combined : DEFAULT_CATEGORIES;
 }
 
 export default function App() {
@@ -101,18 +126,17 @@ export default function App() {
     }
   });
   const [formData, setFormData] = useState(() => makeBlankForm(DEFAULT_CATEGORIES));
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [collectionSelectedCategory, setCollectionSelectedCategory] = useState('All');
   const [collectionFavoritesOnly, setCollectionFavoritesOnly] = useState(false);
   const [activeView, setActiveView] = useState('home');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [status, setStatus] = useState('Ready');
-  const [fileId, setFileId] = useState(null);
   const [selectedThought, setSelectedThought] = useState(null);
+  const [isEditingThought, setIsEditingThought] = useState(false);
+  const [editFormData, setEditFormData] = useState(() => makeBlankForm(DEFAULT_CATEGORIES));
   const tokenClientRef = useRef(null);
+  const syncedTokenRef = useRef(null);
 
   useEffect(() => {
     if (categories.length && formData.category && !categories.includes(formData.category)) {
@@ -170,35 +194,17 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const mergeThoughts = (local, remote) => {
-    const map = new Map();
-    (remote || []).forEach((thought) => map.set(thought.id, thought));
-    (local || []).forEach((thought) => map.set(thought.id, thought));
-    return Array.from(map.values()).sort((left, right) => {
-      const leftTime = Number(left.createdAt || left.timestamp || 0);
-      const rightTime = Number(right.createdAt || right.timestamp || 0);
-      return rightTime - leftTime;
-    });
-  };
-
-  const mergeCategories = (local, remote) => {
-    const combined = [...new Set([...(remote || []), ...(local || [])].filter(Boolean))];
-    return combined.length ? combined : DEFAULT_CATEGORIES;
-  };
-
-  const isTokenExpired = () => tokenExpiry && Date.now() >= tokenExpiry;
-
-  const clearGoogleToken = () => {
+  const clearGoogleToken = useCallback(() => {
     localStorage.removeItem('gdrive_token');
     localStorage.removeItem('gdrive_token_expires_at');
+    syncedTokenRef.current = null;
     setToken(null);
     setTokenExpiry(null);
-    setFileId(null);
     setStatus('Auth expired');
-  };
+  }, []);
 
-  const syncWithDrive = async (currentThoughts = thoughts, currentCategories = categories) => {
-    if (!token || isTokenExpired()) {
+  const syncWithDrive = useCallback(async (currentThoughts = thoughts, currentCategories = categories) => {
+    if (!token || (tokenExpiry && Date.now() >= tokenExpiry)) {
       clearGoogleToken();
       return;
     }
@@ -207,7 +213,6 @@ export default function App() {
     try {
       const folderId = await GoogleDriveService.getOrCreateFolder(token);
       const { fileId: activeFileId, isNew } = await GoogleDriveService.getOrCreateDataFile(token, folderId);
-      setFileId(activeFileId);
 
       const snapshot = {
         thoughts: currentThoughts,
@@ -237,26 +242,39 @@ export default function App() {
         setStatus('Sync Error');
       }
     }
-  };
+  }, [categories, clearGoogleToken, thoughts, token, tokenExpiry]);
 
   useEffect(() => {
-    if (token) {
-      syncWithDrive(thoughts, categories);
+    if (!token || syncedTokenRef.current === token) {
+      return;
     }
-  }, [token]);
+
+    syncedTokenRef.current = token;
+    syncWithDrive(thoughts, categories);
+  }, [token, thoughts, categories, syncWithDrive]);
 
   useEffect(() => {
     if (!selectedThought) return undefined;
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
-        setSelectedThought(null);
+        closeSelectedThought();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedThought]);
+
+  useEffect(() => {
+    if (!selectedThought) {
+      setIsEditingThought(false);
+      return;
+    }
+
+    setEditFormData(makeEditForm(selectedThought, categories));
+    setIsEditingThought(false);
+  }, [selectedThought, categories]);
 
   const handleLogin = () => {
     if (tokenClientRef.current) {
@@ -269,7 +287,7 @@ export default function App() {
     localStorage.removeItem('gdrive_token_expires_at');
     setToken(null);
     setTokenExpiry(null);
-    setFileId(null);
+    syncedTokenRef.current = null;
     setStatus('Idle');
   };
 
@@ -282,17 +300,18 @@ export default function App() {
     const nextThought = {
       id: crypto.randomUUID(),
       subject: subject || 'Untitled thought',
-      description: description || 'A thoughtful note captured for later.',
+      description,
       category: formData.category || categories[0] || DEFAULT_CATEGORIES[0],
       entryDate: formData.entryDate || new Date().toISOString().slice(0, 10),
       favorite: Boolean(formData.favorite),
-      descriptionAlign: formData.descriptionAlign || 'left',
+      descriptionAlign: formData.descriptionAlign || 'right',
       createdAt: Date.now(),
     };
 
     const updatedThoughts = [nextThought, ...thoughts];
     setThoughts(updatedThoughts);
     setFormData(makeBlankForm(categories));
+    setActiveView('home');
     setStatus('Saved Locally');
 
     if (token) {
@@ -325,10 +344,11 @@ export default function App() {
 
     setCategories(fallbackCategories);
     setThoughts(updatedThoughts);
-    if (selectedCategory === categoryName) {
-      setSelectedCategory('All');
+    if (collectionSelectedCategory === categoryName) {
+      setCollectionSelectedCategory('All');
     }
     setFormData((current) => ({ ...current, category: current.category === categoryName ? fallbackCategory : current.category }));
+    setEditFormData((current) => ({ ...current, category: current.category === categoryName ? fallbackCategory : current.category }));
     setStatus('Category removed');
 
     if (token) {
@@ -336,45 +356,71 @@ export default function App() {
     }
   };
 
-  const toggleFavorite = (id) => {
-    setThoughts((current) => current.map((thought) => (thought.id === id ? { ...thought, favorite: !thought.favorite } : thought)));
+  const toggleFavorite = async (id) => {
+    const updatedThoughts = thoughts.map((thought) => (thought.id === id ? { ...thought, favorite: !thought.favorite } : thought));
+    setThoughts(updatedThoughts);
     setSelectedThought((current) => (current?.id === id ? { ...current, favorite: !current.favorite } : current));
+    setStatus('Saved Locally');
+
+    if (token) {
+      await syncWithDrive(updatedThoughts, categories);
+    }
   };
 
-  const deleteThought = (id) => {
-    setThoughts((current) => current.filter((thought) => thought.id !== id));
+  const deleteThought = async (id) => {
+    const updatedThoughts = thoughts.filter((thought) => thought.id !== id);
+    setThoughts(updatedThoughts);
     if (selectedThought?.id === id) {
       setSelectedThought(null);
+      setIsEditingThought(false);
     }
     setStatus('Thought removed');
+
+    if (token) {
+      await syncWithDrive(updatedThoughts, categories);
+    }
   };
 
-  const visibleThoughts = thoughts.filter((thought) => {
-    const haystack = `${thought.subject} ${thought.description} ${thought.category}`.toLowerCase();
-    const matchesQuery = haystack.includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || thought.category === selectedCategory;
-    const matchesFavorite = !favoritesOnly || thought.favorite;
-    return matchesQuery && matchesCategory && matchesFavorite;
-  });
+  const handleUpdateThought = async (event) => {
+    event.preventDefault();
+    if (!selectedThought) return;
+
+    const subject = editFormData.subject.trim();
+    const description = editFormData.description.trim();
+    if (!subject && !description) return;
+
+    const updatedThought = {
+      ...selectedThought,
+      subject: subject || 'Untitled thought',
+      description,
+      category: editFormData.category || categories[0] || DEFAULT_CATEGORIES[0],
+      entryDate: editFormData.entryDate || new Date().toISOString().slice(0, 10),
+      favorite: Boolean(editFormData.favorite),
+      descriptionAlign: editFormData.descriptionAlign || 'right',
+      updatedAt: Date.now(),
+    };
+
+    const updatedThoughts = thoughts.map((thought) => (thought.id === selectedThought.id ? updatedThought : thought));
+    setThoughts(updatedThoughts);
+    setSelectedThought(updatedThought);
+    setIsEditingThought(false);
+    setStatus('Saved Locally');
+
+    if (token) {
+      await syncWithDrive(updatedThoughts, categories);
+    }
+  };
+
+  const closeSelectedThought = () => {
+    setSelectedThought(null);
+    setIsEditingThought(false);
+  };
 
   const favoriteCount = thoughts.filter((thought) => thought.favorite).length;
   const summarizeText = (value, max = 112) => {
     const baseValue = value || 'No description added yet.';
-    return baseValue.length > max ? `${baseValue.slice(0, max)}…` : baseValue;
+    return baseValue.length > max ? `${baseValue.slice(0, max)}...` : baseValue;
   };
-  const groupedRecentThoughts = categories
-    .map((category) => {
-      const items = visibleThoughts
-        .filter((thought) => thought.category === category)
-        .sort((left, right) => Number(right.createdAt || right.timestamp || 0) - Number(left.createdAt || left.timestamp || 0))
-        .slice(0, 5);
-      return { category, items };
-    })
-    .filter((group) => group.items.length > 0);
-
-  const visibleCategoryGroups = selectedCategory === 'All'
-    ? groupedRecentThoughts
-    : groupedRecentThoughts.filter((group) => group.category === selectedCategory);
 
   return (
     <div className="app-shell">
@@ -384,8 +430,8 @@ export default function App() {
             <Brain size={22} />
           </div>
           <div>
-            <p className="eyebrow">Thought Organizer</p>
-            <h1>Capture ideas with calm clarity</h1>
+            <p className="eyebrow">Google Drive backed notebook</p>
+            <h1>Thought Organizer</h1>
           </div>
         </div>
 
@@ -410,22 +456,37 @@ export default function App() {
 
       <div className="view-tabs" role="tablist" aria-label="Primary views">
         <button type="button" className={`tab-pill ${activeView === 'home' ? 'active' : ''}`} onClick={() => setActiveView('home')}>
-          Home
+          <BookOpen size={16} /> Home
         </button>
-        <button type="button" className={`tab-pill ${activeView === 'collections' ? 'active' : ''}`} onClick={() => setActiveView('collections')}>
-          Collections
+        <button type="button" className={`tab-pill ${activeView === 'add' ? 'active' : ''}`} onClick={() => setActiveView('add')}>
+          <FilePlus2 size={16} /> Add Thought
         </button>
       </div>
 
       <main className="dashboard">
         {activeView === 'home' ? (
-          <>
-            <section className="hero-panel">
+          <CollectionsView
+            categories={categories}
+            thoughts={thoughts}
+            collectionSearchQuery={collectionSearchQuery}
+            setCollectionSearchQuery={setCollectionSearchQuery}
+            collectionSelectedCategory={collectionSelectedCategory}
+            setCollectionSelectedCategory={setCollectionSelectedCategory}
+            collectionFavoritesOnly={collectionFavoritesOnly}
+            setCollectionFavoritesOnly={setCollectionFavoritesOnly}
+            formatDate={formatDate}
+            summarizeText={summarizeText}
+            setSelectedThought={setSelectedThought}
+            onAddThought={() => setActiveView('add')}
+          />
+        ) : (
+          <section className="composer-page">
+            <div className="composer-layout">
               <div className="capture-card">
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">New thought</p>
-                    <h2>Organize your reflections</h2>
+                    <h2>Add a thought</h2>
                   </div>
                   <div className="chip">{thoughts.length} entries</div>
                 </div>
@@ -437,6 +498,7 @@ export default function App() {
                       value={formData.subject}
                       onChange={(event) => setFormData((current) => ({ ...current, subject: event.target.value }))}
                       placeholder="What sparked this thought?"
+                      dir="auto"
                     />
                   </label>
 
@@ -461,7 +523,8 @@ export default function App() {
                       value={formData.description}
                       onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))}
                       placeholder="Add deeper notes, reflections, or context"
-                      style={{ textAlign: formData.descriptionAlign || 'left', direction: formData.descriptionAlign === 'right' ? 'rtl' : 'ltr' }}
+                      dir="auto"
+                      style={{ textAlign: formData.descriptionAlign || 'right' }}
                     />
                   </label>
 
@@ -565,69 +628,152 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </section>
-          </>
-        ) : (
-          <CollectionsView
-            categories={categories}
-            thoughts={thoughts}
-            collectionSearchQuery={collectionSearchQuery}
-            setCollectionSearchQuery={setCollectionSearchQuery}
-            collectionSelectedCategory={collectionSelectedCategory}
-            setCollectionSelectedCategory={setCollectionSelectedCategory}
-            collectionFavoritesOnly={collectionFavoritesOnly}
-            setCollectionFavoritesOnly={setCollectionFavoritesOnly}
-            formatDate={formatDate}
-            summarizeText={summarizeText}
-            setSelectedThought={setSelectedThought}
-          />
+            </div>
+          </section>
         )}
       </main>
+
       {selectedThought && (
-        <div className="preview-backdrop" role="dialog" aria-modal="true" onClick={() => setSelectedThought(null)}>
+        <div className="preview-backdrop" role="dialog" aria-modal="true" onClick={closeSelectedThought}>
           <div className="preview-panel" onClick={(event) => event.stopPropagation()}>
             <div className="preview-head">
               <div>
-                <p className="eyebrow">Full screen preview</p>
+                <p className="eyebrow">{isEditingThought ? 'Edit thought' : 'Full view'}</p>
                 <h3>{selectedThought.subject || 'Untitled thought'}</h3>
               </div>
               <div className="preview-actions">
-                <button type="button" className="icon-button" onClick={(event) => {
-                  event.stopPropagation();
-                  toggleFavorite(selectedThought.id);
-                }} aria-label="Toggle favorite in preview">
-                  <Star size={18} className={selectedThought.favorite ? 'filled' : ''} />
-                </button>
-                <button type="button" className="icon-button" onClick={(event) => {
-                  event.stopPropagation();
-                  deleteThought(selectedThought.id);
-                }} aria-label="Delete thought in preview">
-                  <Trash2 size={18} />
-                </button>
-                <button type="button" className="icon-button" onClick={() => setSelectedThought(null)} aria-label="Close preview">
+                {!isEditingThought && (
+                  <>
+                    <button type="button" className="icon-button" onClick={() => setIsEditingThought(true)} aria-label="Edit thought">
+                      <Pencil size={18} />
+                    </button>
+                    <button type="button" className="icon-button" onClick={(event) => {
+                      event.stopPropagation();
+                      toggleFavorite(selectedThought.id);
+                    }} aria-label="Toggle favorite in preview">
+                      <Star size={18} className={selectedThought.favorite ? 'filled' : ''} />
+                    </button>
+                    <button type="button" className="icon-button" onClick={(event) => {
+                      event.stopPropagation();
+                      deleteThought(selectedThought.id);
+                    }} aria-label="Delete thought in preview">
+                      <Trash2 size={18} />
+                    </button>
+                  </>
+                )}
+                <button type="button" className="icon-button" onClick={closeSelectedThought} aria-label="Close preview">
                   <X size={18} />
                 </button>
               </div>
             </div>
-            <div className="preview-content">
-              <p className="preview-description" style={{ textAlign: selectedThought.descriptionAlign || 'left', direction: selectedThought.descriptionAlign === 'right' ? 'rtl' : 'ltr' }}>
-                {selectedThought.description || 'No description added yet.'}
-              </p>
-              <div className="preview-meta-list">
-                <div className="preview-meta-item">
-                  <span>Category</span>
-                  <strong>{selectedThought.category || 'General'}</strong>
+
+            {isEditingThought ? (
+              <form className="preview-edit-form" onSubmit={handleUpdateThought}>
+                <label className="field">
+                  <span>Subject</span>
+                  <input
+                    value={editFormData.subject}
+                    onChange={(event) => setEditFormData((current) => ({ ...current, subject: event.target.value }))}
+                    placeholder="Thought subject"
+                    dir="auto"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Description</span>
+                  <div className="alignment-picker" role="toolbar" aria-label="Description alignment">
+                    <button type="button" className={`alignment-button ${editFormData.descriptionAlign === 'left' ? 'active' : ''}`} onClick={() => setEditFormData((current) => ({ ...current, descriptionAlign: 'left' }))} aria-label="Align left">
+                      <AlignLeft size={14} />
+                    </button>
+                    <button type="button" className={`alignment-button ${editFormData.descriptionAlign === 'center' ? 'active' : ''}`} onClick={() => setEditFormData((current) => ({ ...current, descriptionAlign: 'center' }))} aria-label="Align center">
+                      <AlignCenter size={14} />
+                    </button>
+                    <button type="button" className={`alignment-button ${editFormData.descriptionAlign === 'right' ? 'active' : ''}`} onClick={() => setEditFormData((current) => ({ ...current, descriptionAlign: 'right' }))} aria-label="Align right">
+                      <AlignRight size={14} />
+                    </button>
+                    <button type="button" className={`alignment-button ${editFormData.descriptionAlign === 'justify' ? 'active' : ''}`} onClick={() => setEditFormData((current) => ({ ...current, descriptionAlign: 'justify' }))} aria-label="Justify text">
+                      <AlignJustify size={14} />
+                    </button>
+                  </div>
+                  <textarea
+                    rows="7"
+                    value={editFormData.description}
+                    onChange={(event) => setEditFormData((current) => ({ ...current, description: event.target.value }))}
+                    placeholder="Update the thought"
+                    dir="auto"
+                    style={{ textAlign: editFormData.descriptionAlign || 'right' }}
+                  />
+                </label>
+
+                <div className="field-row">
+                  <label className="field compact">
+                    <span>Category</span>
+                    <select
+                      value={editFormData.category}
+                      onChange={(event) => setEditFormData((current) => ({ ...current, category: event.target.value }))}
+                    >
+                      {categories.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field compact">
+                    <span>Date</span>
+                    <input
+                      type="date"
+                      value={editFormData.entryDate}
+                      onChange={(event) => setEditFormData((current) => ({ ...current, entryDate: event.target.value }))}
+                    />
+                  </label>
                 </div>
-                <div className="preview-meta-item">
-                  <span>Captured</span>
-                  <strong>{formatDate(selectedThought.entryDate || selectedThought.createdAt || selectedThought.timestamp)}</strong>
+
+                <div className="form-footer">
+                  <label className="favorite-toggle">
+                    <input
+                      type="checkbox"
+                      checked={editFormData.favorite}
+                      onChange={(event) => setEditFormData((current) => ({ ...current, favorite: event.target.checked }))}
+                    />
+                    <Star size={16} /> Favorite
+                  </label>
+
+                  <div className="preview-edit-actions">
+                    <button type="button" className="secondary-button" onClick={() => {
+                      setEditFormData(makeEditForm(selectedThought, categories));
+                      setIsEditingThought(false);
+                    }}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="primary-button save-button">
+                      <Save size={16} /> Save changes
+                    </button>
+                  </div>
                 </div>
-                <div className="preview-meta-item">
-                  <span>Favorite</span>
-                  <strong>{selectedThought.favorite ? 'Yes' : 'No'}</strong>
+              </form>
+            ) : (
+              <div className="preview-content">
+                <p className="preview-description" dir="auto" style={{ textAlign: selectedThought.descriptionAlign || 'right' }}>
+                  {selectedThought.description || 'No description added yet.'}
+                </p>
+                <div className="preview-meta-list">
+                  <div className="preview-meta-item">
+                    <span>Category</span>
+                    <strong>{selectedThought.category || 'General'}</strong>
+                  </div>
+                  <div className="preview-meta-item">
+                    <span>Captured</span>
+                    <strong>{formatDate(selectedThought.entryDate || selectedThought.createdAt || selectedThought.timestamp)}</strong>
+                  </div>
+                  <div className="preview-meta-item">
+                    <span>Favorite</span>
+                    <strong>{selectedThought.favorite ? 'Yes' : 'No'}</strong>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
