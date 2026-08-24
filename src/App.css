@@ -30,7 +30,7 @@ body {
   margin: 0;
   min-height: 100vh;
   color: #171717;
-  background: #ffffff;
+  background: #f8f7f5;
   direction: rtl;
   text-align: right;
 }
@@ -54,7 +54,7 @@ button {
   min-height: 100vh;
   padding: 0 24px 48px;
   color: #171717;
-  background: #ffffff;
+  background: #f8f7f5;
 }
 
 .topbar {
@@ -250,6 +250,84 @@ h1 {
   gap: 24px;
 }
 
+/* ─── Category Tabs ─── */
+
+.category-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d8d4cf transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.category-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.category-tabs::-webkit-scrollbar-thumb {
+  background: #d8d4cf;
+  border-radius: 4px;
+}
+
+.category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 18px;
+  white-space: nowrap;
+  color: #555555;
+  background: #ffffff;
+  border: 1.5px solid #e0dcd7;
+  border-radius: 100px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+  flex-shrink: 0;
+}
+
+.category-tab:hover {
+  color: #c01763;
+  border-color: #c01763;
+  background: #fff8fb;
+  transform: translateY(-1px);
+}
+
+.category-tab.active {
+  color: #ffffff;
+  background: #c01763;
+  border-color: #c01763;
+  box-shadow: 0 4px 14px rgba(192, 23, 99, 0.25);
+}
+
+.category-tab.active .tab-count {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #888888;
+  background: #f0eeeb;
+  border-radius: 100px;
+  line-height: 1;
+}
+
+.tab-favorites {
+  margin-inline-start: auto;
+}
+
+/* ─── Collections Layout ─── */
+
 .collections-heading {
   display: flex;
   justify-content: space-between;
@@ -287,9 +365,6 @@ h1 {
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  padding: 14px 0;
-  border-top: 1px solid #e4e0dc;
-  border-bottom: 1px solid #e4e0dc;
 }
 
 .search-box {
@@ -298,11 +373,11 @@ h1 {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 12px;
+  padding: 0 14px;
   color: #646464;
-  background: #fafafa;
-  border: 1px solid #d8d4cf;
-  border-radius: 6px;
+  background: #ffffff;
+  border: 1.5px solid #e0dcd7;
+  border-radius: 100px;
 }
 
 .search-box input {
@@ -311,7 +386,7 @@ h1 {
   outline: none;
   color: #171717;
   background: transparent;
-  padding: 10px 0;
+  padding: 11px 0;
 }
 
 .toolbar-controls {
@@ -334,6 +409,22 @@ h1 {
   background: #fff4f8;
   border-color: #c01763;
 }
+
+/* ─── Single Category View ─── */
+
+.single-category-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.article-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ─── Sections ─── */
 
 .featured-section,
 .collection-section {
@@ -393,30 +484,31 @@ h1 {
   gap: 14px;
 }
 
+/* ─── Article Cards (Enhanced) ─── */
+
 .article-card {
   width: 100%;
-  min-height: 210px;
-  padding: 15px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   text-align: right;
   color: #171717;
   background: #ffffff;
-  border: 1px solid #ded9d2;
-  border-radius: 8px;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  border: 1px solid #e4e0dc;
+  border-radius: 10px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
 .article-card:hover {
   border-color: #c01763;
-  box-shadow: 0 12px 30px rgba(23, 23, 23, 0.08);
+  box-shadow: 0 8px 28px rgba(192, 23, 99, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .article-meta {
   flex-wrap: wrap;
-  color: #676767;
-  font-size: 0.88rem;
+  color: #888888;
+  font-size: 0.85rem;
 }
 
 .favorite-mark {
@@ -426,20 +518,29 @@ h1 {
 
 .article-card strong {
   color: #111111;
-  font-size: 1.28rem;
-  line-height: 1.65;
+  font-size: 1.35rem;
+  line-height: 1.75;
   font-weight: 700;
 }
 
-.feature-card-large strong {
-  font-size: 2rem;
-  line-height: 1.55;
+.article-card p {
+  color: #3a3a3a;
+  font-size: 1.08rem;
+  line-height: 1.95;
 }
 
-.article-card p {
-  color: #444444;
-  font-size: 1rem;
-  line-height: 1.75;
+.article-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  color: #7a5a00;
+  background: #fef9ec;
+  border: 1px solid #eed9a0;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .article-open {
@@ -449,12 +550,21 @@ h1 {
   font-weight: 700;
 }
 
+/* In single-category (list) view, make cards horizontal for easier scanning */
+.article-list .article-card {
+  border-right: 4px solid #e4e0dc;
+}
+
+.article-list .article-card:hover {
+  border-right-color: #c01763;
+}
+
 .empty-state {
   min-height: 190px;
   padding: 26px;
   border: 1px solid #ded9d2;
   border-radius: 8px;
-  background: #fafafa;
+  background: #ffffff;
   color: #575757;
   display: flex;
   align-items: center;
@@ -462,6 +572,8 @@ h1 {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* ─── Composer / Add Thought ─── */
 
 .composer-layout {
   display: grid;
@@ -695,6 +807,8 @@ h1 {
   font-size: 0.9rem;
 }
 
+/* ─── Preview Modal ─── */
+
 .preview-backdrop {
   position: fixed;
   inset: 0;
@@ -762,7 +876,7 @@ h1 {
 }
 
 .preview-description {
-  padding: 18px;
+  padding: 22px;
   color: #111111;
   background: #fafafa;
   border: 1px solid #e4e0dc;
@@ -805,6 +919,8 @@ h1 {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ─── Responsive ─── */
 
 @media (max-width: 980px) {
   .featured-grid {
@@ -897,5 +1013,18 @@ h1 {
   .preview-description {
     font-size: 1.12rem;
     line-height: 1.9;
+  }
+
+  .category-tabs {
+    gap: 6px;
+  }
+
+  .category-tab {
+    padding: 8px 14px;
+    font-size: 0.92rem;
+  }
+
+  .tab-favorites {
+    margin-inline-start: 0;
   }
 }

@@ -477,6 +477,8 @@ export default function App() {
             formatDate={formatDate}
             summarizeText={summarizeText}
             setSelectedThought={setSelectedThought}
+            toggleFavorite={toggleFavorite}
+            deleteThought={deleteThought}
             onAddThought={() => setActiveView('add')}
           />
         ) : (
