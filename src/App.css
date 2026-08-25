@@ -71,17 +71,14 @@ button {
 .brand-block {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 42px;
 }
 
 .brand-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
+  width: 96px;
+  height: 96px;
   display: grid;
   place-items: center;
-  color: #ffffff;
-  background: #171717;
 }
 
 .eyebrow {

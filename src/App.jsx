@@ -427,7 +427,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-block">
           <div className="brand-icon">
-            <Brain size={22} />
+            <img src="/logo.png" alt="Brain icon" width={120} height={120} / >
           </div>
           <div>
             <p className="eyebrow">Google Drive backed notebook</p>
