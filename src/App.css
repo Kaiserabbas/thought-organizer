@@ -86,7 +86,7 @@ button {
 
 .eyebrow {
   margin: 0 0 3px;
-  color: #c01763;
+  color: #125d01;
   font-size: 0.9rem;
   font-weight: 700;
   text-transform: none;
@@ -206,8 +206,8 @@ h1 {
 .toggle-pill:hover,
 .filter-pill:hover,
 .icon-button:hover {
-  border-color: #c01763;
-  color: #c01763;
+  border-color: #125d01;
+  color: #125d01;
 }
 
 .dashboard,
@@ -238,8 +238,8 @@ h1 {
 }
 
 .tab-pill.active {
-  color: #c01763;
-  border-bottom-color: #c01763;
+  color: #125d01;
+  border-bottom-color: #125d01;
 }
 
 .dashboard,
@@ -289,17 +289,17 @@ h1 {
 }
 
 .category-tab:hover {
-  color: #c01763;
-  border-color: #c01763;
+  color: #125d01;
+  border-color: #125d01;
   background: #fff8fb;
   transform: translateY(-1px);
 }
 
 .category-tab.active {
   color: #ffffff;
-  background: #c01763;
-  border-color: #c01763;
-  box-shadow: 0 4px 14px rgba(192, 23, 99, 0.25);
+  background: #125d01;
+  border-color: #125d01;
+  box-shadow: 0 4px 14px rgba(18, 93, 1, 0.25);
 }
 
 .category-tab.active .tab-count {
@@ -405,9 +405,9 @@ h1 {
 }
 
 .toggle-pill.active {
-  color: #c01763;
+  color: #125d01;
   background: #fff4f8;
-  border-color: #c01763;
+  border-color: #125d01;
 }
 
 /* ─── Single Category View ─── */
@@ -501,7 +501,7 @@ h1 {
 }
 
 .article-card:hover {
-  border-color: #c01763;
+  border-color: #125d01;
   box-shadow: 0 8px 28px rgba(192, 23, 99, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
@@ -512,8 +512,8 @@ h1 {
 }
 
 .favorite-mark {
-  color: #c01763;
-  fill: #c01763;
+  color: #125d01;
+  fill: #125d01;
 }
 
 .article-card strong {
@@ -545,7 +545,7 @@ h1 {
 
 .article-open {
   margin-top: auto;
-  color: #c01763;
+  color: #125d01;
   font-size: 0.92rem;
   font-weight: 700;
 }
@@ -556,7 +556,7 @@ h1 {
 }
 
 .article-list .article-card:hover {
-  border-right-color: #c01763;
+  border-right-color: #125d01;
 }
 
 .empty-state {
@@ -618,7 +618,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   padding: 6px 10px;
-  color: #c01763;
+  color: #125d01;
   background: #fff4f8;
   border: 1px solid #edc7d8;
   border-radius: 6px;
@@ -663,7 +663,7 @@ h1 {
 .field select:focus,
 .category-inputs input:focus,
 .search-box:focus-within {
-  border-color: #c01763;
+  border-color: #125d01;
   box-shadow: 0 0 0 3px rgba(192, 23, 99, 0.12);
 }
 
@@ -696,7 +696,7 @@ h1 {
 }
 
 .favorite-toggle input {
-  accent-color: #c01763;
+  accent-color: #125d01;
 }
 
 .save-button {
@@ -735,7 +735,7 @@ h1 {
   width: 22px;
   height: 22px;
   padding: 0;
-  color: #9c1d1d;
+  color: #125d01;
   background: #ffffff;
   border: 1px solid #e3c3c3;
   border-radius: 6px;
@@ -760,9 +760,9 @@ h1 {
 }
 
 .alignment-button.active {
-  color: #c01763;
+  color: #125d01;
   background: #fff4f8;
-  border-color: #c01763;
+  border-color: #125d01;
 }
 
 .category-inputs {
@@ -865,8 +865,8 @@ h1 {
 }
 
 .icon-button .filled {
-  color: #c01763;
-  fill: #c01763;
+  color: #125d01;
+  fill: #125d01;
 }
 
 .preview-content {
@@ -880,7 +880,7 @@ h1 {
   color: #111111;
   background: #fafafa;
   border: 1px solid #e4e0dc;
-  border-right: 4px solid #c01763;
+  border-right: 4px solid #125d01;
   border-radius: 8px;
   font-size: 1.35rem;
   line-height: 2.1;
