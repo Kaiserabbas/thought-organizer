@@ -572,11 +572,53 @@ export default function App() {
     setIsEditingThought(false);
   }, [selectedThought, categories]);
 
-  // Universal Login Handler: Supports both Native Chrome Custom Tabs & Web
-  const handleLogin = async () => {
-    if (Capacitor.isNativePlatform()) {
-      // In native Android APK: Use Google OAuth 2.0 via System Browser / Chrome Custom Tab
-      // This complies with Google's OAuth 2.0 policy and avoids the 403 disallowed_useragent block
+  // Universal Login Handler: Supports In-App GIS Popup (direct, zero-config) & Browser Flow
+  const handleLogin = async (options = {}) => {
+    const useBrowser = Boolean(options && options.browser);
+
+    // 1. In-App GIS Popup (Primary)
+    // Works seamlessly on Web and inside the APK with sanitized User-Agent and popup dialog in MainActivity.
+    // Does NOT send or require any redirect_uri, eliminating Error 400: redirect_uri_mismatch!
+    if (!useBrowser) {
+      if (tokenClientRef.current) {
+        try {
+          tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
+          return;
+        } catch (err) {
+          console.warn('In-app tokenClient request failed, trying fallback:', err);
+        }
+      } else if (window.google?.accounts?.oauth2) {
+        try {
+          const client = window.google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/drive.file',
+            callback: async (response) => {
+              if (response.error) {
+                setStatus('Auth Error');
+                return;
+              }
+              localStorage.setItem('gdrive_token', response.access_token);
+              setToken(response.access_token);
+              if (response.expires_in) {
+                const expiresAt = Date.now() + Number(response.expires_in) * 1000;
+                localStorage.setItem('gdrive_token_expires_at', String(expiresAt));
+                setTokenExpiry(expiresAt);
+              }
+              setStatus('Connected');
+            },
+          });
+          tokenClientRef.current = client;
+          client.requestAccessToken({ prompt: 'consent' });
+          return;
+        } catch (err) {
+          console.warn('Direct token client initialization failed:', err);
+        }
+      }
+    }
+
+    // 2. Browser / Chrome Custom Tab flow (Secondary / Fallback)
+    // Note: Requires https://kaiserabbas.github.io/thought-organizer/ to be registered in Google Cloud Console
+    if (Capacitor.isNativePlatform() || useBrowser) {
       const redirectUri = 'https://kaiserabbas.github.io/thought-organizer/';
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
         redirectUri
@@ -584,16 +626,22 @@ export default function App() {
 
       try {
         await Browser.open({ url: authUrl });
-      } catch {
-        if (tokenClientRef.current) {
-          tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
-        }
-      }
-    } else {
-      if (tokenClientRef.current) {
-        tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
+      } catch (browserErr) {
+        console.error('Browser open failed:', browserErr);
       }
     }
+  };
+
+  const handleManualToken = (inputToken) => {
+    if (!inputToken || !inputToken.trim()) return false;
+    const cleanToken = inputToken.trim();
+    localStorage.setItem('gdrive_token', cleanToken);
+    const expiresAt = Date.now() + 3600 * 1000;
+    localStorage.setItem('gdrive_token_expires_at', String(expiresAt));
+    setToken(cleanToken);
+    setTokenExpiry(expiresAt);
+    setStatus('Connected');
+    return true;
   };
 
   const handleLogout = () => {
@@ -1286,6 +1334,7 @@ export default function App() {
             handleLogout={handleLogout}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
+            onManualToken={handleManualToken}
           />
         )}
       </main>

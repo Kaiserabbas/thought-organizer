@@ -31,10 +31,13 @@ export default function SettingsView({
   handleLogout,
   onExportBackup,
   onImportBackup,
+  onManualToken,
 }) {
   const [newCatInput, setNewCatInput] = useState('');
   const [catError, setCatError] = useState('');
   const [showOAuthHelp, setShowOAuthHelp] = useState(false);
+  const [showManualToken, setShowManualToken] = useState(false);
+  const [manualTokenInput, setManualTokenInput] = useState('');
   const fileInputRef = useRef(null);
 
   const handleAddSubmit = (e) => {
@@ -140,9 +143,19 @@ export default function SettingsView({
                 <LogOut size={16} /> Disconnect Drive
               </button>
             ) : (
-              <button type="button" className="secondary-button" onClick={handleLogin}>
-                Connect Google Drive
-              </button>
+              <>
+                <button type="button" className="secondary-button" onClick={() => handleLogin()}>
+                  Connect Google Drive
+                </button>
+                <button
+                  type="button"
+                  className="action-link"
+                  onClick={() => setShowManualToken(!showManualToken)}
+                  title="Manual Access Token paste"
+                >
+                  <Key size={15} /> Paste Token
+                </button>
+              </>
             )}
 
             <button
@@ -155,10 +168,63 @@ export default function SettingsView({
             </button>
           </div>
 
+          {showManualToken && !token && (
+            <div className="oauth-help-box" style={{ marginTop: '0.75rem' }}>
+              <h4>Manual OAuth Access Token</h4>
+              <p style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+                If you have an OAuth 2.0 token (from OAuth Playground or gcloud), you can paste it directly below:
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="ya29.a0..."
+                  value={manualTokenInput}
+                  onChange={(e) => setManualTokenInput(e.target.value)}
+                  style={{
+                    flex: '1',
+                    minWidth: '200px',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.85rem',
+                  }}
+                />
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ padding: '0.5rem 1rem' }}
+                  onClick={() => {
+                    if (onManualToken && onManualToken(manualTokenInput)) {
+                      setShowManualToken(false);
+                      setManualTokenInput('');
+                    }
+                  }}
+                >
+                  Apply Token
+                </button>
+              </div>
+            </div>
+          )}
+
           {showOAuthHelp && (
             <div className="oauth-help-box">
-              <h4>Google OAuth 2.0 Setup for Android APK</h4>
-              <p>To authorize Google Drive from the Android APK without policy blocks:</p>
+              <h4>Google OAuth 2.0 Setup Details</h4>
+              <p>
+                <strong>1. In-App Direct Login (Default):</strong><br />
+                Tapping <em>&quot;Connect Google Drive&quot;</em> opens the Google Sign-in dialog directly inside the app with a sanitized User-Agent. It uses in-app messaging and does <strong>not</strong> require redirect URIs.
+              </p>
+              <p style={{ marginTop: '0.5rem' }}>
+                <strong>2. If using External Browser / Chrome Custom Tab:</strong><br />
+                If you encounter <code>Error 400: redirect_uri_mismatch</code>, go to{' '}
+                <em>Google Cloud Console &gt; APIs &amp; Services &gt; Credentials</em>, select your Web Client ID, and add this exact URI to <strong>Authorized redirect URIs</strong>:
+                <br />
+                <code>https://kaiserabbas.github.io/thought-organizer/</code>
+              </p>
+              <p style={{ marginTop: '0.5rem' }}>
+                <strong>3. Native Android Client ID (Optional):</strong>
+              </p>
               <ul>
                 <li>
                   <strong>Package Name:</strong> <code>com.kaiserabbas.thoughtorganizer</code>
@@ -166,9 +232,6 @@ export default function SettingsView({
                 <li>
                   <strong>SHA-1 Fingerprint:</strong>{' '}
                   <code>33:9E:8C:73:EC:2E:85:22:11:3E:F5:84:CA:DD:60:E9:14:95:36:C7</code>
-                </li>
-                <li>
-                  In <em>Google Cloud Console &gt; APIs &amp; Services &gt; Credentials</em>, ensure you have an <strong>Android</strong> OAuth Client ID registered with the package name and SHA-1 above, or authorized redirect URLs.
                 </li>
               </ul>
             </div>
