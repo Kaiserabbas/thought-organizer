@@ -1,13 +1,17 @@
+import React, { useState } from 'react';
 import {
   BookOpen,
   CalendarDays,
+  Check,
   ChevronLeft,
+  Copy,
   Heart,
   Plus,
   Search,
   Sparkles,
   Star,
   Tag,
+  Trash2,
 } from 'lucide-react';
 
 export default function CollectionsView({
@@ -23,10 +27,21 @@ export default function CollectionsView({
   summarizeText,
   setSelectedThought,
   toggleFavorite,
-  deleteThought,
+  onRequestDeleteThought,
   onAddThought,
+  onCopyThought,
 }) {
+  const [copiedId, setCopiedId] = useState(null);
   const normalizedQuery = collectionSearchQuery.trim().toLowerCase();
+
+  const handleQuickCopy = (e, thought) => {
+    e.stopPropagation();
+    if (onCopyThought) {
+      onCopyThought(thought);
+      setCopiedId(thought.id);
+      setTimeout(() => setCopiedId(null), 1800);
+    }
+  };
 
   // Apply search + favorites filter (category is handled by tabs)
   const baseFiltered = [...thoughts]
@@ -43,7 +58,7 @@ export default function CollectionsView({
     ? baseFiltered
     : baseFiltered.filter((thought) => thought.category === collectionSelectedCategory);
 
-  // Count thoughts per category (from baseFiltered so counts respect search/fav filters)
+  // Count thoughts per category
   const categoryCounts = {};
   for (const cat of categories) {
     categoryCounts[cat] = baseFiltered.filter((t) => t.category === cat).length;
@@ -60,24 +75,90 @@ export default function CollectionsView({
 
   const totalFavorites = thoughts.filter((thought) => thought.favorite).length;
 
-  const renderThoughtCard = (thought) => (
-    <button key={thought.id} type="button" className="article-card" onClick={() => setSelectedThought(thought)}>
-      <span className="article-meta">
-        <CalendarDays size={13} /> {formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}
-        {thought.favorite && <Heart size={13} className="favorite-mark" />}
-      </span>
-      <strong>{thought.subject || 'Untitled thought'}</strong>
-      <p dir="auto" style={{ textAlign: thought.descriptionAlign || 'right' }}>
-        {summarizeText(thought.description, 180)}
-      </p>
-      <span className="article-category-badge">
-        <Tag size={11} /> {thought.category}
-      </span>
-      <span className="article-open">
-        Open full view <ChevronLeft size={14} />
-      </span>
-    </button>
-  );
+  const renderThoughtCard = (thought) => {
+    const cardColorClass = `card-color-${thought.cardColor || 'default'}`;
+
+    return (
+      <div
+        key={thought.id}
+        className={`article-card ${cardColorClass}`}
+        onClick={() => setSelectedThought(thought)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            setSelectedThought(thought);
+          }
+        }}
+      >
+        <div className="card-top-row">
+          <span className="article-meta">
+            <CalendarDays size={13} /> {formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}
+          </span>
+          <div className="card-quick-actions">
+            <button
+              type="button"
+              className={`card-quick-btn copy-btn ${copiedId === thought.id ? 'active' : ''}`}
+              onClick={(e) => handleQuickCopy(e, thought)}
+              title={copiedId === thought.id ? 'Copied!' : 'Copy post'}
+              aria-label="Copy post"
+            >
+              {copiedId === thought.id ? <Check size={14} className="copied-check" /> : <Copy size={14} />}
+            </button>
+            <button
+              type="button"
+              className={`card-quick-btn fav-btn ${thought.favorite ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(thought.id);
+              }}
+              title={thought.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-label="Toggle favorite"
+            >
+              <Star size={15} className={thought.favorite ? 'filled' : ''} />
+            </button>
+            <button
+              type="button"
+              className="card-quick-btn del-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestDeleteThought(thought);
+              }}
+              title="Delete thought"
+              aria-label="Delete thought"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Enhanced Heading with generous padding */}
+        <strong className="article-title">{thought.subject || 'Untitled thought'}</strong>
+
+        <p
+          className="article-excerpt"
+          dir="auto"
+          style={{
+            textAlign: thought.descriptionAlign || 'right',
+            color: thought.textColor || undefined,
+            fontWeight: thought.isBold ? '700' : undefined,
+            fontStyle: thought.isItalic ? 'italic' : undefined,
+          }}
+        >
+          {summarizeText(thought.description, 160)}
+        </p>
+
+        <div className="card-bottom-row">
+          <span className="article-category-badge">
+            <Tag size={11} /> {thought.category}
+          </span>
+          <span className="article-open">
+            Open full view <ChevronLeft size={14} />
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className="collections-page">
@@ -159,7 +240,7 @@ export default function CollectionsView({
         <div className="empty-state">
           <Sparkles size={20} />
           <p>No thoughts saved yet.</p>
-          <button type="button" className="secondary-button" onClick={onAddThought}>
+          <button type="button" className="primary-button" onClick={onAddThought}>
             <Plus size={14} /> Add Thought
           </button>
         </div>
@@ -182,21 +263,40 @@ export default function CollectionsView({
           </div>
         </section>
       ) : (
-        /* ── All categories: grouped sections, ALL thoughts per group ── */
+        /* ── All categories: grouped sections, 2 thoughts each then ...more ── */
         <div className="collection-section-grid">
-          {groupedCollections.map((group) => (
-            <section key={group.category} className="collection-section">
-              <div className="collection-title-row">
-                <h2>{group.category}</h2>
-                <span>
-                  {group.items.length} {group.items.length === 1 ? 'thought' : 'thoughts'}
-                </span>
-              </div>
-              <div className="article-grid">
-                {group.items.map((thought) => renderThoughtCard(thought))}
-              </div>
-            </section>
-          ))}
+          {groupedCollections.map((group) => {
+            const displayedItems = group.items.slice(0, 2);
+            const remainingCount = group.items.length - 2;
+
+            return (
+              <section key={group.category} className="collection-section">
+                <div className="collection-title-row">
+                  <h2>{group.category}</h2>
+                  <span>
+                    {group.items.length} {group.items.length === 1 ? 'thought' : 'thoughts'}
+                  </span>
+                </div>
+                <div className="article-grid">
+                  {displayedItems.map((thought) => renderThoughtCard(thought))}
+                </div>
+                {remainingCount > 0 && (
+                  <div className="category-more-row">
+                    <button
+                      type="button"
+                      className="category-more-link"
+                      onClick={() => {
+                        setCollectionSelectedCategory(group.category);
+                        setCollectionFavoritesOnly(false);
+                      }}
+                    >
+                      ...more ({remainingCount} more)
+                    </button>
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
     </section>
