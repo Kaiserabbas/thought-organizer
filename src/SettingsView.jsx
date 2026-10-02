@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   CloudLightning,
   Database,
+  Download,
   Heart,
+  HelpCircle,
+  Key,
   LogOut,
   Moon,
   Plus,
@@ -10,6 +13,7 @@ import {
   Sun,
   Tag,
   Trash2,
+  Upload,
 } from 'lucide-react';
 
 export default function SettingsView({
@@ -25,9 +29,13 @@ export default function SettingsView({
   handleRefreshMemory,
   handleLogin,
   handleLogout,
+  onExportBackup,
+  onImportBackup,
 }) {
   const [newCatInput, setNewCatInput] = useState('');
   const [catError, setCatError] = useState('');
+  const [showOAuthHelp, setShowOAuthHelp] = useState(false);
+  const fileInputRef = useRef(null);
 
   const handleAddSubmit = (e) => {
     e.preventDefault();
@@ -103,8 +111,8 @@ export default function SettingsView({
               <CloudLightning size={20} />
             </div>
             <div>
-              <h3>Synchronization & Backup</h3>
-              <p className="card-subtitle">Manage Google Drive backup and memory refresh</p>
+              <h3>Cloud & Google Drive Backup</h3>
+              <p className="card-subtitle">Sync to Google Drive and refresh notebook state</p>
             </div>
           </div>
 
@@ -136,7 +144,35 @@ export default function SettingsView({
                 Connect Google Drive
               </button>
             )}
+
+            <button
+              type="button"
+              className="action-link"
+              onClick={() => setShowOAuthHelp(!showOAuthHelp)}
+              title="Google OAuth 2.0 configuration details"
+            >
+              <HelpCircle size={15} /> APK OAuth Info
+            </button>
           </div>
+
+          {showOAuthHelp && (
+            <div className="oauth-help-box">
+              <h4>Google OAuth 2.0 Setup for Android APK</h4>
+              <p>To authorize Google Drive from the Android APK without policy blocks:</p>
+              <ul>
+                <li>
+                  <strong>Package Name:</strong> <code>com.kaiserabbas.thoughtorganizer</code>
+                </li>
+                <li>
+                  <strong>SHA-1 Fingerprint:</strong>{' '}
+                  <code>33:9E:8C:73:EC:2E:85:22:11:3E:F5:84:CA:DD:60:E9:14:95:36:C7</code>
+                </li>
+                <li>
+                  In <em>Google Cloud Console &gt; APIs &amp; Services &gt; Credentials</em>, ensure you have an <strong>Android</strong> OAuth Client ID registered with the package name and SHA-1 above, or authorized redirect URLs.
+                </li>
+              </ul>
+            </div>
+          )}
 
           <div className="sync-stats-box">
             <div className="sync-stat">
@@ -151,6 +187,40 @@ export default function SettingsView({
               <Tag size={15} />
               <span>{categories.length} categories</span>
             </div>
+          </div>
+        </section>
+
+        {/* ── Offline Local Backup (Export / Import JSON) ── */}
+        <section className="settings-card full-width">
+          <div className="card-section-heading">
+            <div className="settings-icon-badge">
+              <Key size={20} />
+            </div>
+            <div>
+              <h3>Local Backup &amp; Restore (Offline-Safe)</h3>
+              <p className="card-subtitle">Export or import all your thoughts and categories directly as a JSON file</p>
+            </div>
+          </div>
+
+          <div className="backup-actions-row">
+            <button type="button" className="secondary-button" onClick={onExportBackup}>
+              <Download size={16} /> Export JSON Backup
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload size={16} /> Restore from JSON Backup
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={onImportBackup}
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+            />
           </div>
         </section>
 

@@ -1,4 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { App as CapApp } from '@capacitor/app';
 import { GoogleDriveService } from './googleDrive';
 import CollectionsView from './CollectionsView';
 import SettingsView from './SettingsView';
@@ -323,7 +326,66 @@ export default function App() {
     }
   }, [deletedThoughtIds]);
 
-  // Google OAuth Client
+  // URL Hash OAuth token parser (for redirect-based OAuth callbacks)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      try {
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const expiresIn = params.get('expires_in');
+        if (accessToken) {
+          localStorage.setItem('gdrive_token', accessToken);
+          setToken(accessToken);
+          if (expiresIn) {
+            const expiresAt = Date.now() + Number(expiresIn) * 1000;
+            localStorage.setItem('gdrive_token_expires_at', String(expiresAt));
+            setTokenExpiry(expiresAt);
+          }
+          setStatus('Connected');
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      } catch (err) {
+        console.error('Error parsing token hash:', err);
+      }
+    }
+  }, []);
+
+  // Deep Link Listener for Mobile APK (OAuth callback via custom scheme)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      const sub = CapApp.addListener('appUrlOpen', async (data) => {
+        try {
+          const url = data.url;
+          if (url && (url.includes('access_token=') || url.includes('token='))) {
+            await Browser.close().catch(() => {});
+            const rawParams = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
+            const params = new URLSearchParams(rawParams);
+            const accessToken = params.get('access_token') || params.get('token');
+            const expiresIn = params.get('expires_in');
+            if (accessToken) {
+              localStorage.setItem('gdrive_token', accessToken);
+              setToken(accessToken);
+              if (expiresIn) {
+                const expiresAt = Date.now() + Number(expiresIn) * 1000;
+                localStorage.setItem('gdrive_token_expires_at', String(expiresAt));
+                setTokenExpiry(expiresAt);
+              }
+              setStatus('Connected');
+            }
+          }
+        } catch (err) {
+          console.error('Error handling deep link:', err);
+        }
+      });
+
+      return () => {
+        sub.then((s) => s.remove());
+      };
+    }
+  }, []);
+
+  // Google OAuth Client for Web
   useEffect(() => {
     const initGoogle = () => {
       if (window.google?.accounts?.oauth2) {
@@ -510,9 +572,27 @@ export default function App() {
     setIsEditingThought(false);
   }, [selectedThought, categories]);
 
-  const handleLogin = () => {
-    if (tokenClientRef.current) {
-      tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
+  // Universal Login Handler: Supports both Native Chrome Custom Tabs & Web
+  const handleLogin = async () => {
+    if (Capacitor.isNativePlatform()) {
+      // In native Android APK: Use Google OAuth 2.0 via System Browser / Chrome Custom Tab
+      // This complies with Google's OAuth 2.0 policy and avoids the 403 disallowed_useragent block
+      const redirectUri = 'https://kaiserabbas.github.io/thought-organizer/';
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file')}&prompt=consent`;
+
+      try {
+        await Browser.open({ url: authUrl });
+      } catch {
+        if (tokenClientRef.current) {
+          tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
+        }
+      }
+    } else {
+      if (tokenClientRef.current) {
+        tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
+      }
     }
   };
 
@@ -543,6 +623,49 @@ export default function App() {
         setStatus('Memory Refreshed');
       }
     }
+  };
+
+  // Local JSON Backup Export & Import Handlers
+  const handleExportBackup = () => {
+    const data = {
+      thoughts,
+      categories,
+      deletedThoughtIds,
+      exportedAt: new Date().toISOString(),
+      app: 'Thought Organizer',
+      version: '1.0.0',
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `thought-organizer-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        const importedThoughts = Array.isArray(parsed.thoughts) ? parsed.thoughts : [];
+        const importedCategories = normalizeCategories(parsed.categories);
+        const mergedT = mergeThoughts(thoughts, importedThoughts, deletedThoughtIds);
+        const mergedC = mergeCategories(categories, importedCategories);
+        setThoughts(mergedT);
+        setCategories(mergedC);
+        setStatus('Backup Restored');
+        if (token) {
+          await syncWithDrive(mergedT, mergedC, { directPush: true });
+        }
+      } catch {
+        alert('Invalid backup JSON file.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Copy Thought Handler
@@ -761,7 +884,6 @@ export default function App() {
     return baseValue.length > max ? `${baseValue.slice(0, max)}...` : baseValue;
   };
 
-  // Helper for word and character count
   const getCounts = (text = '') => {
     const trimmed = text.trim();
     const words = trimmed ? trimmed.split(/\s+/).length : 0;
@@ -909,9 +1031,7 @@ export default function App() {
                   <div className="field">
                     <span>Description</span>
 
-                    {/* Formatting Controls Bar */}
                     <div className="rich-toolbar" role="toolbar" aria-label="Text formatting tools">
-                      {/* Alignment picker */}
                       <div className="toolbar-group">
                         <button
                           type="button"
@@ -949,7 +1069,6 @@ export default function App() {
 
                       <div className="toolbar-divider" />
 
-                      {/* Bold & Italic */}
                       <div className="toolbar-group">
                         <button
                           type="button"
@@ -961,7 +1080,7 @@ export default function App() {
                               setFormData((c) => ({ ...c, isBold: !c.isBold }));
                             }
                           }}
-                          title="Bold (Click to toggle note bold or wrap selection)"
+                          title="Bold"
                         >
                           <Bold size={14} />
                         </button>
@@ -975,7 +1094,7 @@ export default function App() {
                               setFormData((c) => ({ ...c, isItalic: !c.isItalic }));
                             }
                           }}
-                          title="Italic (Click to toggle note italic or wrap selection)"
+                          title="Italic"
                         >
                           <Italic size={14} />
                         </button>
@@ -999,7 +1118,6 @@ export default function App() {
 
                       <div className="toolbar-divider" />
 
-                      {/* Text Color Picker */}
                       <div className="toolbar-color-group">
                         <span className="toolbar-label" title="Text Color">
                           <Type size={13} />
@@ -1166,6 +1284,8 @@ export default function App() {
             handleRefreshMemory={handleRefreshMemory}
             handleLogin={handleLogin}
             handleLogout={handleLogout}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
           />
         )}
       </main>
@@ -1179,14 +1299,12 @@ export default function App() {
           >
             <div className="preview-head">
               <div>
-                {/* Note: "Full view" text removed per user request */}
                 {isEditingThought && <p className="eyebrow">Edit thought</p>}
                 <h3>{selectedThought.subject || 'Untitled thought'}</h3>
               </div>
               <div className="preview-actions">
                 {!isEditingThought && (
                   <>
-                    {/* "Copy Post" Button */}
                     <button
                       type="button"
                       className={`action-button copy-post-btn ${copiedThought ? 'copied' : ''}`}
@@ -1267,7 +1385,6 @@ export default function App() {
                   />
                 </label>
 
-                {/* Edit Form Description with Toolbar */}
                 <div className="field">
                   <span>Description</span>
                   <div className="rich-toolbar" role="toolbar" aria-label="Description formatting tools">
@@ -1394,7 +1511,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Edit Card Color */}
                 <div className="field">
                   <div className="field-label-row">
                     <span className="flex-label">
@@ -1420,7 +1536,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Edit Category Chips */}
                 <div className="field">
                   <div className="field-label-row">
                     <span>Category</span>

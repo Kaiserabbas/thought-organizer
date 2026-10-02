@@ -1,0 +1,13 @@
+{
+  "appId": "com.kaiserabbas.thoughtorganizer",
+  "appName": "Thought Organizer",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": [
+      "accounts.google.com",
+      "*.google.com",
+      "*.googleapis.com"
+    ]
+  }
+}
