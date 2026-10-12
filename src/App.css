@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Almarai:wght@400;700&family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Tajawal:wght@400;500;700&display=swap');
 
 @font-face {
   font-family: 'Jameel Noori Nastaleeq';
@@ -996,6 +996,118 @@ h1 {
   transform: scale(1.15);
 }
 
+/* ── Toolbar Font Selector ── */
+.font-select-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.font-picker-select {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  transition: all 140ms ease;
+  max-width: 175px;
+}
+
+.font-picker-select:focus,
+.font-picker-select:hover {
+  border-color: var(--accent-color);
+}
+
+.font-picker-select optgroup {
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+}
+
+.font-picker-select option {
+  font-weight: normal;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  padding: 4px;
+}
+
+/* ── Paste Buttons ── */
+.toolbar-paste-btn {
+  width: auto !important;
+  padding: 0 8px !important;
+  gap: 5px;
+  display: inline-flex !important;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border-color) !important;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-radius: 6px;
+}
+
+.toolbar-paste-btn:hover {
+  background: var(--accent-subtle) !important;
+  color: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+}
+
+.paste-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--accent-color);
+  background: var(--accent-subtle);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.paste-quick-btn:hover {
+  background: var(--accent-color);
+  color: #ffffff;
+}
+
+/* ── Floating Paste Toast ── */
+.paste-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--primary-btn-bg);
+  color: var(--primary-btn-text);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  pointer-events: none;
+  animation: slideUpFade 200ms ease;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .textarea-footer {
   display: flex;
   align-items: center;
@@ -1488,17 +1600,15 @@ h1 {
   gap: 8px;
 }
 
-/* ── Copy Post Button in Full View ── */
+/* ── Copy Button in Full View ── */
 .copy-post-btn {
-  gap: 6px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  padding: 7px 14px;
+  display: grid;
+  place-items: center;
   transition: all 180ms ease;
-  white-space: nowrap;
 }
 
-.copy-post-btn.copied {
+.copy-post-btn.copied,
+.icon-button.copied {
   background: var(--accent-color) !important;
   border-color: var(--accent-color) !important;
   color: #ffffff !important;

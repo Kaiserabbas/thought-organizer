@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getFontFamilyCss } from './fontUtils';
 import {
   BookOpen,
   CalendarDays,
@@ -133,7 +134,12 @@ export default function CollectionsView({
         </div>
 
         {/* Enhanced Heading with generous padding */}
-        <strong className="article-title">{thought.subject || 'Untitled thought'}</strong>
+        <strong
+          className="article-title"
+          style={{ fontFamily: getFontFamilyCss(thought.fontFamily) }}
+        >
+          {thought.subject || 'Untitled thought'}
+        </strong>
 
         <p
           className="article-excerpt"
@@ -143,6 +149,7 @@ export default function CollectionsView({
             color: thought.textColor || undefined,
             fontWeight: thought.isBold ? '700' : undefined,
             fontStyle: thought.isItalic ? 'italic' : undefined,
+            fontFamily: getFontFamilyCss(thought.fontFamily),
           }}
         >
           {summarizeText(thought.description, 160)}

@@ -16,6 +16,7 @@ import {
   BookOpen,
   Check,
   CheckCircle,
+  ClipboardPaste,
   CloudLightning,
   Copy,
   FilePlus2,
@@ -39,6 +40,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
+import { getFontFamilyCss, getCategoriesByUsage, FONT_OPTIONS } from './fontUtils';
 
 const CLIENT_ID = '574535920766-ntjn0mr37h07sd3l1n5c3o2j4na7bqok.apps.googleusercontent.com';
 const DEFAULT_CATEGORIES = ['Political', 'Religious', 'Poetry', 'Economics'];
@@ -72,6 +74,7 @@ function makeBlankForm(categories) {
     favorite: false,
     descriptionAlign: 'right',
     textColor: '',
+    fontFamily: '',
     cardColor: 'default',
     isBold: false,
     isItalic: false,
@@ -87,6 +90,7 @@ function makeEditForm(thought, categories) {
     favorite: Boolean(thought?.favorite),
     descriptionAlign: thought?.descriptionAlign || 'right',
     textColor: thought?.textColor || '',
+    fontFamily: thought?.fontFamily || '',
     cardColor: thought?.cardColor || 'default',
     isBold: Boolean(thought?.isBold),
     isItalic: Boolean(thought?.isItalic),
@@ -266,7 +270,20 @@ export default function App() {
     }
   });
 
-  const [formData, setFormData] = useState(() => makeBlankForm(DEFAULT_CATEGORIES));
+  const sortedCategories = React.useMemo(() => {
+    return getCategoriesByUsage(categories, thoughts);
+  }, [categories, thoughts]);
+
+  const [formData, setFormData] = useState(() => {
+    try {
+      const savedCats = JSON.parse(localStorage.getItem('cached_categories') || 'null');
+      const savedThoughts = JSON.parse(localStorage.getItem('cached_thoughts') || '[]');
+      const initialSorted = getCategoriesByUsage(normalizeCategories(savedCats), Array.isArray(savedThoughts) ? savedThoughts : []);
+      return makeBlankForm(initialSorted);
+    } catch {
+      return makeBlankForm(DEFAULT_CATEGORIES);
+    }
+  });
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [collectionSelectedCategory, setCollectionSelectedCategory] = useState('All');
   const [collectionFavoritesOnly, setCollectionFavoritesOnly] = useState(false);
@@ -277,6 +294,64 @@ export default function App() {
   const [isEditingThought, setIsEditingThought] = useState(false);
   const [editFormData, setEditFormData] = useState(() => makeBlankForm(DEFAULT_CATEGORIES));
   const [copiedThought, setCopiedThought] = useState(false);
+  const [pasteToast, setPasteToast] = useState(null);
+
+  const showPasteToast = (msg) => {
+    setPasteToast(msg);
+    setTimeout(() => setPasteToast(null), 2000);
+  };
+
+  const readClipboardText = async () => {
+    try {
+      if (navigator?.clipboard?.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) return text;
+      }
+    } catch (err) {
+      console.warn('Clipboard read error:', err);
+    }
+    return window.prompt('Paste text here:') || '';
+  };
+
+  const handlePasteToDescription = async (isEdit = false) => {
+    const text = await readClipboardText();
+    if (!text) return;
+    const ref = isEdit ? editTextareaRef : addTextareaRef;
+    const setForm = isEdit ? setEditFormData : setFormData;
+    const textarea = ref.current;
+    if (textarea) {
+      const start = textarea.selectionStart ?? 0;
+      const end = textarea.selectionEnd ?? 0;
+      setForm((current) => {
+        const desc = current.description || '';
+        const updated = desc.substring(0, start) + text + desc.substring(end);
+        return { ...current, description: updated };
+      });
+      setTimeout(() => {
+        textarea.focus();
+        const cursor = start + text.length;
+        textarea.setSelectionRange(cursor, cursor);
+      }, 50);
+    } else {
+      setForm((current) => ({
+        ...current,
+        description: current.description ? `${current.description}\n${text}` : text,
+      }));
+    }
+    showPasteToast('Pasted into description!');
+  };
+
+  const handlePasteToSubject = async (isEdit = false) => {
+    const text = await readClipboardText();
+    if (!text) return;
+    const setForm = isEdit ? setEditFormData : setFormData;
+    const firstLine = text.split('\n')[0].trim();
+    setForm((current) => ({
+      ...current,
+      subject: firstLine,
+    }));
+    showPasteToast('Pasted into subject!');
+  };
 
   // Confirmation Modal state
   const [confirmModal, setConfirmModal] = useState({
@@ -770,6 +845,7 @@ export default function App() {
       favorite: Boolean(formData.favorite),
       descriptionAlign: formData.descriptionAlign || 'right',
       textColor: formData.textColor || '',
+      fontFamily: formData.fontFamily || '',
       cardColor: formData.cardColor || 'default',
       isBold: Boolean(formData.isBold),
       isItalic: Boolean(formData.isItalic),
@@ -779,7 +855,7 @@ export default function App() {
 
     const updatedThoughts = [nextThought, ...thoughts];
     setThoughts(updatedThoughts);
-    setFormData(makeBlankForm(categories));
+    setFormData(makeBlankForm(sortedCategories));
     setActiveView('home');
     setStatus('Saved Locally');
 
@@ -903,6 +979,7 @@ export default function App() {
       favorite: Boolean(editFormData.favorite),
       descriptionAlign: editFormData.descriptionAlign || 'right',
       textColor: editFormData.textColor || '',
+      fontFamily: editFormData.fontFamily || '',
       cardColor: editFormData.cardColor || 'default',
       isBold: Boolean(editFormData.isBold),
       isItalic: Boolean(editFormData.isItalic),
@@ -1025,7 +1102,7 @@ export default function App() {
       <main className="dashboard">
         {activeView === 'home' && (
           <CollectionsView
-            categories={categories}
+            categories={sortedCategories}
             thoughts={thoughts}
             collectionSearchQuery={collectionSearchQuery}
             setCollectionSearchQuery={setCollectionSearchQuery}
@@ -1065,21 +1142,60 @@ export default function App() {
                     }
                   }}
                 >
-                  <label className="field">
-                    <span>Subject</span>
+                  <div className="field">
+                    <div className="field-label-row">
+                      <span>Subject</span>
+                      <button
+                        type="button"
+                        className="paste-quick-btn"
+                        onClick={() => handlePasteToSubject(false)}
+                        title="Paste from clipboard into subject"
+                      >
+                        <ClipboardPaste size={12} />
+                        <span>Paste</span>
+                      </button>
+                    </div>
                     <input
                       value={formData.subject}
                       onChange={(event) => setFormData((current) => ({ ...current, subject: event.target.value }))}
                       placeholder="What sparked this thought?"
                       dir="auto"
+                      style={{
+                        fontFamily: getFontFamilyCss(formData.fontFamily),
+                      }}
                     />
-                  </label>
+                  </div>
 
                   {/* ── Description with Rich Formatting Toolbar ── */}
                   <div className="field">
-                    <span>Description</span>
+                    <div className="field-label-row">
+                      <span>Description</span>
+                      <button
+                        type="button"
+                        className="paste-quick-btn"
+                        onClick={() => handlePasteToDescription(false)}
+                        title="Paste from clipboard into description"
+                      >
+                        <ClipboardPaste size={12} />
+                        <span>Paste</span>
+                      </button>
+                    </div>
 
                     <div className="rich-toolbar" role="toolbar" aria-label="Text formatting tools">
+                      <div className="toolbar-group">
+                        <button
+                          type="button"
+                          className="toolbar-btn toolbar-paste-btn"
+                          onClick={() => handlePasteToDescription(false)}
+                          title="Paste from clipboard"
+                        >
+                          <ClipboardPaste size={14} />
+                          <span>Paste</span>
+                        </button>
+                      </div>
+
+                      <div className="toolbar-divider" />
+
                       <div className="toolbar-group">
                         <button
                           type="button"
@@ -1181,6 +1297,37 @@ export default function App() {
                           />
                         ))}
                       </div>
+
+                      <div className="toolbar-divider" />
+
+                      <div className="toolbar-group font-select-group">
+                        <span className="toolbar-label" title="Font Style">
+                          <Type size={13} />
+                        </span>
+                        <select
+                          className="font-picker-select"
+                          value={formData.fontFamily || ''}
+                          onChange={(e) => setFormData((c) => ({ ...c, fontFamily: e.target.value }))}
+                          title="Select Arabic or English font"
+                          aria-label="Font family"
+                        >
+                          <option value="">Default Font</option>
+                          <optgroup label="── Arabic Fonts (خطوط عربية) ──">
+                            <option value="cairo">Cairo (كايرو - حديث)</option>
+                            <option value="amiri">Amiri (أميري - كلاسيكي)</option>
+                            <option value="tajawal">Tajawal (تجوال - هندسي)</option>
+                            <option value="almarai">Almarai (المرعي - واضح)</option>
+                            <option value="nastaleeq">Nastaleeq (نستعلیق)</option>
+                          </optgroup>
+                          <optgroup label="── English Fonts ──">
+                            <option value="inter">Inter (Clean Sans)</option>
+                            <option value="playfair">Playfair Display (Serif)</option>
+                            <option value="lora">Lora (Editorial Serif)</option>
+                            <option value="outfit">Outfit (Modern Sans)</option>
+                            <option value="jetbrains">JetBrains Mono (Monospace)</option>
+                          </optgroup>
+                        </select>
+                      </div>
                     </div>
 
                     <textarea
@@ -1195,6 +1342,7 @@ export default function App() {
                         color: formData.textColor || undefined,
                         fontWeight: formData.isBold ? '700' : 'normal',
                         fontStyle: formData.isItalic ? 'italic' : 'normal',
+                        fontFamily: getFontFamilyCss(formData.fontFamily),
                       }}
                     />
                     <div className="textarea-footer">
@@ -1239,7 +1387,7 @@ export default function App() {
                     </div>
 
                     <div className="category-select-chips" role="radiogroup" aria-label="Select category">
-                      {categories.map((category) => (
+                      {sortedCategories.map((category) => (
                         <button
                           key={category}
                           type="button"
@@ -1322,7 +1470,7 @@ export default function App() {
           <SettingsView
             theme={theme}
             setTheme={setTheme}
-            categories={categories}
+            categories={sortedCategories}
             thoughts={thoughts}
             onAddCategory={handleAddCategory}
             onRequestDeleteCategory={requestDeleteCategory}
@@ -1349,27 +1497,21 @@ export default function App() {
             <div className="preview-head">
               <div>
                 {isEditingThought && <p className="eyebrow">Edit thought</p>}
-                <h3>{selectedThought.subject || 'Untitled thought'}</h3>
+                <h3 style={{ fontFamily: getFontFamilyCss(selectedThought.fontFamily) }}>
+                  {selectedThought.subject || 'Untitled thought'}
+                </h3>
               </div>
               <div className="preview-actions">
                 {!isEditingThought && (
                   <>
                     <button
                       type="button"
-                      className={`action-button copy-post-btn ${copiedThought ? 'copied' : ''}`}
+                      className={`icon-button copy-post-btn ${copiedThought ? 'copied' : ''}`}
                       onClick={() => handleCopyThought(selectedThought)}
                       aria-label="Copy thought"
-                      title="Copy text to clipboard"
+                      title={copiedThought ? 'Copied!' : 'Copy post'}
                     >
-                      {copiedThought ? (
-                        <>
-                          <Check size={16} /> <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={16} /> <span>Copy Post</span>
-                        </>
-                      )}
+                      {copiedThought ? <Check size={17} /> : <Copy size={17} />}
                     </button>
 
                     <button
@@ -1424,19 +1566,59 @@ export default function App() {
                   }
                 }}
               >
-                <label className="field">
-                  <span>Subject</span>
+                <div className="field">
+                  <div className="field-label-row">
+                    <span>Subject</span>
+                    <button
+                      type="button"
+                      className="paste-quick-btn"
+                      onClick={() => handlePasteToSubject(true)}
+                      title="Paste from clipboard into subject"
+                    >
+                      <ClipboardPaste size={12} />
+                      <span>Paste</span>
+                    </button>
+                  </div>
                   <input
                     value={editFormData.subject}
                     onChange={(event) => setEditFormData((current) => ({ ...current, subject: event.target.value }))}
                     placeholder="Thought subject"
                     dir="auto"
+                    style={{
+                      fontFamily: getFontFamilyCss(editFormData.fontFamily),
+                    }}
                   />
-                </label>
+                </div>
 
                 <div className="field">
-                  <span>Description</span>
+                  <div className="field-label-row">
+                    <span>Description</span>
+                    <button
+                      type="button"
+                      className="paste-quick-btn"
+                      onClick={() => handlePasteToDescription(true)}
+                      title="Paste from clipboard into description"
+                    >
+                      <ClipboardPaste size={12} />
+                      <span>Paste</span>
+                    </button>
+                  </div>
+
                   <div className="rich-toolbar" role="toolbar" aria-label="Description formatting tools">
+                    <div className="toolbar-group">
+                      <button
+                        type="button"
+                        className="toolbar-btn toolbar-paste-btn"
+                        onClick={() => handlePasteToDescription(true)}
+                        title="Paste from clipboard"
+                      >
+                        <ClipboardPaste size={14} />
+                        <span>Paste</span>
+                      </button>
+                    </div>
+
+                    <div className="toolbar-divider" />
+
                     <div className="toolbar-group">
                       <button
                         type="button"
@@ -1538,6 +1720,37 @@ export default function App() {
                         />
                       ))}
                     </div>
+
+                    <div className="toolbar-divider" />
+
+                    <div className="toolbar-group font-select-group">
+                      <span className="toolbar-label" title="Font Style">
+                        <Type size={13} />
+                      </span>
+                      <select
+                        className="font-picker-select"
+                        value={editFormData.fontFamily || ''}
+                        onChange={(e) => setEditFormData((c) => ({ ...c, fontFamily: e.target.value }))}
+                        title="Select Arabic or English font"
+                        aria-label="Font family"
+                      >
+                        <option value="">Default Font</option>
+                        <optgroup label="── Arabic Fonts (خطوط عربية) ──">
+                          <option value="cairo">Cairo (كايرو - حديث)</option>
+                          <option value="amiri">Amiri (أميري - كلاسيكي)</option>
+                          <option value="tajawal">Tajawal (تجوال - هندسي)</option>
+                          <option value="almarai">Almarai (المرعي - واضح)</option>
+                          <option value="nastaleeq">Nastaleeq (نستعلیق)</option>
+                        </optgroup>
+                        <optgroup label="── English Fonts ──">
+                          <option value="inter">Inter (Clean Sans)</option>
+                          <option value="playfair">Playfair Display (Serif)</option>
+                          <option value="lora">Lora (Editorial Serif)</option>
+                          <option value="outfit">Outfit (Modern Sans)</option>
+                          <option value="jetbrains">JetBrains Mono (Monospace)</option>
+                        </optgroup>
+                      </select>
+                    </div>
                   </div>
 
                   <textarea
@@ -1552,6 +1765,7 @@ export default function App() {
                       color: editFormData.textColor || undefined,
                       fontWeight: editFormData.isBold ? '700' : 'normal',
                       fontStyle: editFormData.isItalic ? 'italic' : 'normal',
+                      fontFamily: getFontFamilyCss(editFormData.fontFamily),
                     }}
                   />
                   <div className="textarea-footer">
@@ -1591,7 +1805,7 @@ export default function App() {
                     <span className="field-hint">Click a category to select it</span>
                   </div>
                   <div className="category-select-chips" role="radiogroup" aria-label="Select category">
-                    {categories.map((category) => (
+                    {sortedCategories.map((category) => (
                       <button
                         key={category}
                         type="button"
@@ -1656,6 +1870,7 @@ export default function App() {
                     color: selectedThought.textColor || undefined,
                     fontWeight: selectedThought.isBold ? '700' : undefined,
                     fontStyle: selectedThought.isItalic ? 'italic' : undefined,
+                    fontFamily: getFontFamilyCss(selectedThought.fontFamily),
                   }}
                 >
                   {renderFormattedContent(selectedThought.description)}
@@ -1674,6 +1889,14 @@ export default function App() {
                     <span>Favorite</span>
                     <strong>{selectedThought.favorite ? 'Yes' : 'No'}</strong>
                   </div>
+                  {selectedThought.fontFamily && (
+                    <div className="preview-meta-item">
+                      <span>Font</span>
+                      <strong>
+                        {FONT_OPTIONS.find((f) => f.id === selectedThought.fontFamily)?.label || selectedThought.fontFamily}
+                      </strong>
+                    </div>
+                  )}
                   {selectedThought.cardColor && selectedThought.cardColor !== 'default' && (
                     <div className="preview-meta-item">
                       <span>Card Style</span>
@@ -1684,6 +1907,14 @@ export default function App() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Floating Paste Toast ── */}
+      {pasteToast && (
+        <div className="paste-toast" role="status" aria-live="polite">
+          <CheckCircle size={15} />
+          <span>{pasteToast}</span>
         </div>
       )}
 
