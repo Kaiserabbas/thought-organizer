@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Thought Organizer</title>
+  <meta name="description" content="Privacy Policy for Thought Organizer Android Application">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --primary: #4338ca;
+      --primary-light: #e0e7ff;
+      --border: #e2e8f0;
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0f19;
+        --card-bg: #131c2e;
+        --text: #f1f5f9;
+        --text-muted: #94a3b8;
+        --primary: #6366f1;
+        --primary-light: #1e1b4b;
+        --border: #1e293b;
+      }
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      padding: 2.5rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .badge {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+    }
+    .meta {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    p, ul {
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-size: 0.98rem;
+    }
+    ul {
+      padding-left: 1.5rem;
+    }
+    li {
+      margin-bottom: 0.5rem;
+    }
+    strong {
+      color: var(--text);
+    }
+    a {
+      color: var(--primary);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .highlight-box {
+      background: var(--primary-light);
+      border-left: 4px solid var(--primary);
+      padding: 1rem 1.25rem;
+      border-radius: 6px;
+      margin: 1.5rem 0;
+    }
+    .highlight-box p {
+      color: var(--text);
+      margin-bottom: 0;
+      font-size: 0.92rem;
+      font-weight: 500;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Official Policy</span>
+      <h1>Privacy Policy</h1>
+      <p class="meta">
+        <strong>App:</strong> Thought Organizer &bull; 
+        <strong>Package ID:</strong> <code>com.thought_organizer.aab</code> &bull; 
+        <strong>Effective Date:</strong> October 18, 2026
+      </p>
+    </header>
+
+    <div class="highlight-box">
+      <p>🛡️ <strong>Summary:</strong> Thought Organizer is built with privacy by design. All your thoughts, notes, and categories are saved locally on your device. We do not operate external tracking servers and we never collect, share, or sell your personal data.</p>
+    </div>
+
+    <h2>1. Introduction</h2>
+    <p>
+      This Privacy Policy applies to the <strong>Thought Organizer</strong> mobile application (hereinafter referred to as "the App", "we", "our", or "us"), available on the Google Play Store with package identifier <code>com.thought_organizer.aab</code>.
+    </p>
+    <p>
+      We are dedicated to safeguarding your personal privacy. This document outlines how your data is handled when you use Thought Organizer.
+    </p>
+
+    <h2>2. Information We Collect and Process</h2>
+    <p>The App manages the following types of information strictly to provide note-taking functionality:</p>
+    <ul>
+      <li><strong>User-Generated Content:</strong> Thought subjects, descriptions, text formatting (bold, italic, colors, text alignment), categories, card colors, and favorite status marks that you create.</li>
+      <li><strong>Local Storage:</strong> Your entries are stored locally within the application sandbox on your device using HTML5 LocalStorage.</li>
+      <li><strong>No Analytics or Tracking:</strong> The App does not integrate any third-party tracking libraries, analytics SDKs, advertising identifiers (AAID), or user profiling tools.</li>
+    </ul>
+
+    <h2>3. Google Drive Integration (Optional Cloud Backup)</h2>
+    <p>
+      Thought Organizer provides an optional feature allowing you to synchronize and back up your notebook state to your personal Google Drive account.
+    </p>
+    <ul>
+      <li><strong>Scope of Access:</strong> When connecting to Google Drive, the App requests only the <code>https://www.googleapis.com/auth/drive.file</code> scope. This is a restricted, minimal scope that permits the App to create, edit, and access <em>only</em> the files and folders created specifically by Thought Organizer (e.g., <code>thought_organizer_data.json</code>).</li>
+      <li><strong>No Access to Personal Files:</strong> The App cannot access, read, view, or modify any other files or folders stored in your Google Drive.</li>
+      <li><strong>Token Security:</strong> The OAuth 2.0 access token issued by Google Identity Services is stored securely inside your device's local storage and is transmitted solely over encrypted HTTPS directly to Google's official Drive APIs (<code>googleapis.com</code>).</li>
+      <li><strong>Google User Data Policy Compliance:</strong> Thought Organizer’s use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
+    </ul>
+
+    <h2>4. How We Share and Disclose Data</h2>
+    <p>
+      <strong>We do not share, sell, rent, or trade your personal data or notes with any third parties.</strong>
+    </p>
+    <p>
+      Because we operate zero external databases or cloud servers, your information remains strictly under your control on your physical device and within your chosen Google Drive account.
+    </p>
+
+    <h2>5. Data Retention, Control, and Deletion</h2>
+    <p>You have full autonomy over your data at all times:</p>
+    <ul>
+      <li><strong>Delete Individual Entries:</strong> You can delete any thought or category directly within the app interface.</li>
+      <li><strong>Local Backup Export / Import:</strong> You can export an offline JSON copy of your entire notebook or restore it anytime.</li>
+      <li><strong>Disconnect Google Drive:</strong> You can click "Disconnect Drive" in the Settings menu to immediately erase active access tokens from the App.</li>
+      <li><strong>Delete Cloud Backups:</strong> You can delete the <code>Thought Organizer Backup</code> folder directly from your Google Drive at any time.</li>
+      <li><strong>Revoke App Permissions:</strong> You can revoke Thought Organizer's authorization at any time via your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google Account Permissions page</a>.</li>
+    </ul>
+
+    <h2>6. Permissions Used by the Application</h2>
+    <p>The application requests only the following standard Android permissions:</p>
+    <ul>
+      <li><code>android.permission.INTERNET</code>: Required strictly to communicate with Google Drive APIs when you explicitly opt to connect your Google account, and to query Google Identity Services.</li>
+    </ul>
+    <p>
+      The App does <strong>not</strong> request sensitive permissions such as Location, Camera, Microphone, Contacts, Phone State, or access to external media.
+    </p>
+
+    <h2>7. Children's Privacy</h2>
+    <p>
+      Thought Organizer does not target children under the age of 13 and does not knowingly solicit or collect personal information from children. If you believe that a child has provided us with personal information, please contact us so we can take appropriate measures.
+    </p>
+
+    <h2>8. Changes to this Privacy Policy</h2>
+    <p>
+      We may occasionally update this Privacy Policy to reflect changes in legal requirements or app enhancements. The latest version will always be maintained at this URL, and the "Effective Date" at the top will be updated accordingly.
+    </p>
+
+    <h2>9. Contact Us</h2>
+    <p>
+      If you have questions, feedback, or data privacy inquiries regarding Thought Organizer, please contact:
+    </p>
+    <ul>
+      <li><strong>Developer Contact:</strong> Kaiser Abbas</li>
+      <li><strong>Email:</strong> <a href="mailto:CONSOLEDXB1@gmail.com">CONSOLEDXB1@gmail.com</a> / <a href="mailto:kayser.abbas@gmail.com">kayser.abbas@gmail.com</a></li>
+      <li><strong>Source Code &amp; Issues:</strong> <a href="https://github.com/Kaiserabbas/thought-organizer" target="_blank" rel="noopener noreferrer">github.com/Kaiserabbas/thought-organizer</a></li>
+    </ul>
+
+    <footer>
+      <p>&copy; 2026 Thought Organizer &bull; All rights reserved.</p>
+    </footer>
+  </div>
+</body>
+</html>
