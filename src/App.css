@@ -3131,3 +3131,17 @@ h1 {
 .reset-defaults-btn:hover {
   color: var(--accent-color);
 }
+
+
+/* ── Live Transcript Placeholder Styles ── */
+.transcript-box.active {
+  border-color: var(--accent-color);
+  background: var(--bg-surface);
+}
+
+.transcript-placeholder {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-style: italic;
+  display: block;
+}

@@ -283,18 +283,26 @@ export default function VoicePanel({
           </div>
 
           {/* Live Transcript Preview */}
-          {(transcript || interimTranscript) && (
-            <div
-              className="transcript-box"
-              dir={isUrdu ? 'rtl' : 'ltr'}
-              lang={isUrdu ? 'ur' : 'en'}
-            >
-              <span className="transcript-final">{transcript}</span>
-              {interimTranscript && (
-                <span className="transcript-interim"> {interimTranscript}</span>
-              )}
-            </div>
-          )}
+          <div
+            className={`transcript-box ${isListening ? 'active' : ''}`}
+            dir={isUrdu ? 'rtl' : 'ltr'}
+            lang={isUrdu ? 'ur' : 'en'}
+          >
+            {transcript || interimTranscript ? (
+              <>
+                <span className="transcript-final">{transcript}</span>
+                {interimTranscript && (
+                  <span className="transcript-interim"> {interimTranscript}</span>
+                )}
+              </>
+            ) : (
+              <span className="transcript-placeholder">
+                {isListening
+                  ? (isUrdu ? 'سن رہا ہوں، بولیں... (Listening, speak now)' : 'Listening, speak now...')
+                  : (isUrdu ? 'بولنے کے لیے اوپر مائیک پر کلک کریں' : 'Click the microphone above to start speaking')}
+              </span>
+            )}
+          </div>
 
           {/* Error */}
           {voiceError && (

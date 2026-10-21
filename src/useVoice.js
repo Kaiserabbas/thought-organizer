@@ -1,5 +1,5 @@
 // useVoice.js — Bilingual voice recognition: auto-detects Urdu & English
-// Rock-solid Web Speech API engine: continuous dictation with ZERO mic on/off flickering.
+// Rock-solid Web Speech API engine: continuous dictation, live typing, zero dropped chunks.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transliterateRomanUrduOffline, isLikelyRomanUrdu } from './urduTransliterator';
@@ -49,9 +49,7 @@ export function formatEnglishSentence(text) {
  * useVoice — Bilingual STT hook
  * - 'ur-PK' → outputs native Urdu Unicode script (not Roman transliteration)
  * - 'en-US' → outputs English text with capitalized first words
- * - Seamless: isListening stays TRUE during the entire dictation session (no UI flickering)
- * - Background recycling: smoothly handles browser phrase endings without hardware clicks
- * - Deduplicates chunks so text never repeats
+ * - Continuous live transcription without chunk dropping or looping
  *
  * @param {Object}   options
  * @param {string}   options.lang       — initial lang 'en-US' | 'ur-PK'
@@ -68,11 +66,10 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
   const recognitionRef       = useRef(null);
   const shouldRestartRef     = useRef(false);
   const restartTimerRef      = useRef(null);
-  const consecutiveErrorsRef = useRef(0);
   const currentLangRef       = useRef(lang);
+  const lastChunkRef         = useRef(''); // guards against immediate duplicate echo only
   const onNewChunkRef        = useRef(onNewChunk);
   const onCommandRef         = useRef(onCommand);
-  const seenChunksRef        = useRef(new Set()); // dedup — prevent repeated text
 
   onNewChunkRef.current = onNewChunk;
   onCommandRef.current  = onCommand;
@@ -80,7 +77,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
   const setCurrentLang = useCallback((newLang) => {
     setCurrentLangState(newLang);
     currentLangRef.current = newLang;
-    // If actively listening, restart with the new language cleanly
+    // If actively listening, seamlessly switch to new language
     if (shouldRestartRef.current && recognitionRef.current) {
       try {
         recognitionRef.current.abort();
@@ -97,7 +94,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
   const stopListening = useCallback(() => {
     shouldRestartRef.current = false;
-    consecutiveErrorsRef.current = 0;
+    lastChunkRef.current = '';
 
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
@@ -107,7 +104,6 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     if (recognitionRef.current) {
       const rec = recognitionRef.current;
       recognitionRef.current = null;
-      // Strip listeners first so abort() does NOT fire onend and trigger restart
       rec.onend = null;
       rec.onerror = null;
       rec.onresult = null;
@@ -122,12 +118,11 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
   const resetTranscript = useCallback(() => {
     setTranscript('');
     setInterimTranscript('');
-    seenChunksRef.current.clear();
+    lastChunkRef.current = '';
   }, []);
 
   // ── Result Handler ─────────────────────────────────────────────────
   const handleResult = useCallback((event) => {
-    consecutiveErrorsRef.current = 0;
     let interimText = '';
 
     for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -154,9 +149,9 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
           processedChunk = transliterateRomanUrduOffline(chunk);
         }
 
-        // Dedup: skip if we sent this exact chunk already in this session
-        if (seenChunksRef.current.has(processedChunk)) continue;
-        seenChunksRef.current.add(processedChunk);
+        // Skip exact duplicate from same recognition packet
+        if (lastChunkRef.current === processedChunk) continue;
+        lastChunkRef.current = processedChunk;
 
         // Auto-switch language display if Urdu script detected in output
         const isUrdu = isUrduMode || containsUrdu(processedChunk);
@@ -213,19 +208,19 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
   // ── Error Handler ──────────────────────────────────────────────────
   const handleError = useCallback((event) => {
-    // Abort is a normal event when recycling or stopping
+    // Normal abort when recycling or stopping
     if (event.error === 'aborted') {
       return;
     }
 
-    // Silence timeout is normal when pausing to think; NEVER kill recording or count as error!
+    // Silence timeout is normal when pausing to think
     if (event.error === 'no-speech') {
       setInterimTranscript('');
       return;
     }
 
     if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-      setError('Microphone access denied. Please allow microphone permission in browser settings.');
+      setError('Microphone permission blocked. Please allow mic in browser settings.');
       shouldRestartRef.current = false;
       setIsListening(false);
       return;
@@ -238,20 +233,9 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
       return;
     }
 
-    // Only count severe network/service errors towards stopping
-    consecutiveErrorsRef.current += 1;
-    if (consecutiveErrorsRef.current >= 3) {
-      shouldRestartRef.current = false;
-      setIsListening(false);
-      setError('Speech service disconnected. Tap mic to restart.');
-      return;
-    }
-
     if (event.error === 'network') {
-      // Non-fatal momentary network glitch: keep listening
+      // Non-fatal momentary disconnect: speech server will auto-reconnect
       setInterimTranscript('');
-    } else {
-      setError(`Voice note: ${event.error}`);
     }
   }, []);
 
@@ -267,30 +251,26 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
       rec.lang = currentLangRef.current || 'ur-PK';
 
       rec.onstart = () => {
-        // Listening is active — keep isListening strictly TRUE
         setIsListening(true);
-        consecutiveErrorsRef.current = 0;
+        setError(null);
       };
 
       rec.onresult = handleResult;
       rec.onerror = handleError;
 
       rec.onend = () => {
-        // If this instance is no longer the active one, discard cleanly
         if (recognitionRef.current !== rec) {
           return;
         }
         recognitionRef.current = null;
 
-        // If user manually stopped, power down UI
         if (!shouldRestartRef.current) {
           setIsListening(false);
           setInterimTranscript('');
           return;
         }
 
-        // User is still recording: seamlessly cycle next recognition pass
-        // CRITICAL: isListening stays TRUE so the UI does NOT flicker on and off!
+        // Seamless background recycling between phrases
         if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
         restartTimerRef.current = setTimeout(() => {
           if (!shouldRestartRef.current) return;
@@ -303,9 +283,10 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     } catch (err) {
       console.warn('Spawn recognition error:', err);
       if (shouldRestartRef.current) {
-        setTimeout(() => {
+        if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = setTimeout(() => {
           if (shouldRestartRef.current) spawnRecognition();
-        }, 300);
+        }, 200);
       }
     }
   }, [handleResult, handleError]);
@@ -323,14 +304,13 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     }
 
     setError(null);
-    consecutiveErrorsRef.current = 0;
+    lastChunkRef.current = '';
 
     if (forceLang) {
       setCurrentLangState(forceLang);
       currentLangRef.current = forceLang;
     }
 
-    // Set recording mode active IMMEDIATELY so UI turns on instantly
     shouldRestartRef.current = true;
     setIsListening(true);
 
