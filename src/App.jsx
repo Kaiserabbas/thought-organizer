@@ -1415,11 +1415,12 @@ export default function App() {
                     setLang={setVoiceLang}
                     onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
                     onNewChunk={(chunk) => {
-                      // Each chunk is a NEW piece of final text — append it once
-                      setFormData((c) => ({
-                        ...c,
-                        description: c.description ? `${c.description} ${chunk}` : chunk,
-                      }));
+                      // Each chunk is a NEW piece of final text — append with space
+                      setFormData((c) => {
+                        const prev = (c.description || '').trim();
+                        if (!prev) return { ...c, description: chunk };
+                        return { ...c, description: `${prev} ${chunk}` };
+                      });
                     }}
                     onDraftComplete={({ subject, description }) => {
                       setFormData((c) => ({

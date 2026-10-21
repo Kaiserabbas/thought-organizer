@@ -134,10 +134,17 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
   // ── Auto-fill Draft ────────────────────────────────────────────────
   const handleDraftFill = () => {
     if (!transcript || !onDraftComplete) return;
+    const isUrdu = containsUrdu(transcript) || currentLang === 'ur-PK';
+    const separator = isUrdu ? '۔ ' : '. ';
+    const endPunctuation = isUrdu ? '۔' : '.';
     // Split on sentence-ending punctuation (supports Urdu ۔ and . ! ?)
     const lines = transcript.trim().split(/[.!?۔\n]+/).filter(Boolean);
-    const subject     = lines[0]?.trim() || '';
-    const description = lines.slice(1).join('. ').trim() || lines[0]?.trim();
+    const subjectRaw = lines[0]?.trim() || '';
+    const subject = subjectRaw.replace(/[.۔!?؟\s]+$/, '');
+    let description = lines.slice(1).join(separator).trim() || subject;
+    if (description && !/[.۔!?؟]$/.test(description)) {
+      description += endPunctuation;
+    }
     onDraftComplete({ subject, description });
     resetTranscript();
   };

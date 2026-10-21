@@ -123,16 +123,28 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
           seenChunksRef.current.add(processedChunk);
 
           // Auto-switch language display if Urdu script detected in output
-          if (containsUrdu(processedChunk) && useLang !== 'ur-PK') {
+          const isUrdu = isUrduMode || containsUrdu(processedChunk);
+          if (isUrdu && useLang !== 'ur-PK') {
             setCurrentLang('ur-PK');
           }
 
-          // Append to local transcript
-          setTranscript((prev) => prev ? `${prev} ${processedChunk}` : processedChunk);
+          // For every pause: add a space and "۔" for Urdu and "." for English
+          const pausePunctuation = isUrdu ? '۔' : '.';
+          const hasCustomPunctuation = /[؟?!]$/.test(processedChunk.trim());
+          const cleanChunk = processedChunk.replace(/[.۔!?؟\s]+$/, '').trim();
+          let finalChunk = processedChunk;
+          if (hasCustomPunctuation) {
+            finalChunk = processedChunk.trim();
+          } else if (cleanChunk) {
+            finalChunk = `${cleanChunk}${pausePunctuation}`;
+          }
+
+          // Append to local transcript with space
+          setTranscript((prev) => (prev ? `${prev.trim()} ${finalChunk}` : finalChunk));
           setInterimTranscript('');
 
           // Fire parent callback with ONLY this new chunk
-          if (onNewChunkRef.current) onNewChunkRef.current(processedChunk);
+          if (onNewChunkRef.current) onNewChunkRef.current(finalChunk);
 
         } else {
           interimText += rawText;
