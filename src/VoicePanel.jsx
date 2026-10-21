@@ -1,154 +1,122 @@
-// VoicePanel.jsx — Voice Input Panel for the Add Thought form
-// Uses browser-native Web Speech API + Canvas waveform visualizer + Spiritual Audio Export.
+// VoicePanel.jsx — Bilingual Voice Input (Urdu in Urdu script / English in English)
+// Native Web Speech API — zero paid APIs, works offline after browser cache.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Mic,
-  MicOff,
-  Languages,
-  Copy,
-  Download,
-  Volume2,
-  X,
-  Zap,
-} from 'lucide-react';
+import { Copy, Download, Mic, MicOff, Volume2, X, Zap } from 'lucide-react';
 import { useVoice, containsUrdu } from './useVoice';
-import { useTranslate } from './useTranslate';
 import { useTTS } from './useTTS';
 
 /**
  * VoicePanel
- * @param {Object} props
- * @param {function} props.onTranscript — called with (text) when transcript updates
- * @param {function} props.onDraftComplete — called with ({ subject, description }) for Voice Draft Mode
- * @param {string}   props.lang — 'en-US' | 'ur-PK'
- * @param {function} props.setLang — setter for lang
+ * @param {function} props.onNewChunk      — called with each new spoken chunk
+ * @param {function} props.onDraftComplete — called with { subject, description }
+ * @param {string}   props.lang            — 'en-US' | 'ur-PK'
+ * @param {function} props.setLang         — setter for lang
  */
-export default function VoicePanel({ onTranscript, onDraftComplete, lang, setLang }) {
-  const [translatedText, setTranslatedText] = useState('');
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang }) {
+  const [isCollapsed,  setIsCollapsed]  = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const canvasRef = useRef(null);
+
+  const canvasRef    = useRef(null);
   const animFrameRef = useRef(null);
-  const analyserRef = useRef(null);
-  const audioCtxRef = useRef(null);
+  const analyserRef  = useRef(null);
+  const audioCtxRef  = useRef(null);
   const micStreamRef = useRef(null);
 
-  const { translate, isTranslating, error: translateError } = useTranslate();
   const { speak, isSpeaking, exportAudio, isExporting } = useTTS();
 
+  // ── Voice commands from speech ─────────────────────────────────────
   const handleCommand = useCallback((command) => {
-    if (command === 'clear') {
-      resetTranscript();
-      setTranslatedText('');
-    }
-    if (command === 'stop') {
-      stopListening();
-    }
+    if (command === 'clear') { resetTranscript(); }
+    if (command === 'stop')  { handleStopListening(); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const {
     isListening,
     transcript,
     interimTranscript,
+    currentLang,
+    setCurrentLang,
     startListening: startRec,
     stopListening,
     resetTranscript,
     error: voiceError,
     isSupported,
-  } = useVoice({ lang, onCommand: handleCommand });
+  } = useVoice({
+    lang,
+    // onNewChunk: fired with ONLY the new chunk — no repetition
+    onNewChunk: (chunk) => {
+      if (onNewChunk) onNewChunk(chunk);
+    },
+    onCommand: handleCommand,
+  });
 
-  // When transcript updates, optionally notify parent
+  // Sync external lang prop → internal
   useEffect(() => {
-    if (transcript && onTranscript) {
-      onTranscript(transcript);
-    }
-  }, [transcript, onTranscript]);
+    setCurrentLang(lang);
+  }, [lang, setCurrentLang]);
 
-  // Auto-detect language from transcript if typed/spoken in Urdu
+  // Sync internal detected lang → external (e.g. when Urdu is auto-detected)
   useEffect(() => {
-    if (!transcript) return;
-    const hasUrdu = containsUrdu(transcript);
-    if (hasUrdu && lang !== 'ur-PK') {
-      setLang('ur-PK');
+    if (currentLang !== lang) {
+      setLang(currentLang);
     }
-  }, [transcript, lang, setLang]);
+  }, [currentLang, lang, setLang]);
 
-  // ── Waveform visualizer ──────────────────────────────────
+  // ── Waveform Visualizer ────────────────────────────────────────────
   const startWaveform = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       micStreamRef.current = stream;
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-
-      const audioCtx = new AudioContextClass();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const audioCtx = new AudioCtx();
       audioCtxRef.current = audioCtx;
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 64;
       analyserRef.current = analyser;
-      const source = audioCtx.createMediaStreamSource(stream);
-      source.connect(analyser);
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
 
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      const bufLen = analyser.frequencyBinCount;
+      const data   = new Uint8Array(bufLen);
 
       const draw = () => {
         animFrameRef.current = requestAnimationFrame(draw);
-        analyser.getByteFrequencyData(dataArray);
-
+        analyser.getByteFrequencyData(data);
         const { width, height } = canvas;
         ctx.clearRect(0, 0, width, height);
-
-        const barWidth = (width / bufferLength) * 2.2;
+        const bw = (width / bufLen) * 2.2;
         let x = 0;
-
-        for (let i = 0; i < bufferLength; i++) {
-          const barHeight = Math.max(3, (dataArray[i] / 255) * height);
-          const alpha = 0.4 + (dataArray[i] / 255) * 0.6;
-          ctx.fillStyle = '#125d01';
+        for (let i = 0; i < bufLen; i++) {
+          const bh    = Math.max(3, (data[i] / 255) * height);
+          const alpha = 0.4 + (data[i] / 255) * 0.6;
+          ctx.fillStyle   = '#125d01';
           ctx.globalAlpha = alpha;
           ctx.beginPath();
           if (ctx.roundRect) {
-            ctx.roundRect(x, height - barHeight, barWidth - 2, barHeight, 2);
+            ctx.roundRect(x, height - bh, bw - 2, bh, 2);
           } else {
-            ctx.rect(x, height - barHeight, barWidth - 2, barHeight);
+            ctx.rect(x, height - bh, bw - 2, bh);
           }
           ctx.fill();
-          x += barWidth + 1;
+          x += bw + 1;
         }
         ctx.globalAlpha = 1;
       };
-
       draw();
-    } catch {
-      // Microphone stream for visualization unavailable (non-fatal)
-    }
+    } catch { /* non-fatal — waveform is cosmetic */ }
   }, []);
 
   const stopWaveform = useCallback(() => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close().catch(() => {});
-      audioCtxRef.current = null;
-    }
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
+    if (micStreamRef.current) { micStreamRef.current.getTracks().forEach((t) => t.stop()); micStreamRef.current = null; }
+    if (audioCtxRef.current)  { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
     analyserRef.current = null;
-
     const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
   }, []);
 
   const handleStartListening = useCallback(async () => {
@@ -161,75 +129,53 @@ export default function VoicePanel({ onTranscript, onDraftComplete, lang, setLan
     stopWaveform();
   }, [stopListening, stopWaveform]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopWaveform();
-    };
-  }, [stopWaveform]);
+  useEffect(() => () => stopWaveform(), [stopWaveform]);
 
-  // ── Translation ──────────────────────────────────────────
-  const handleTranslate = async () => {
-    if (!transcript) return;
-    const from = containsUrdu(transcript) ? 'ur' : 'en';
-    const to = from === 'ur' ? 'en' : 'ur';
-    const result = await translate(transcript, from, to);
-    setTranslatedText(result);
-  };
-
-  // ── Voice Draft Mode ─────────────────────────────────────
+  // ── Auto-fill Draft ────────────────────────────────────────────────
   const handleDraftFill = () => {
     if (!transcript || !onDraftComplete) return;
-    const lines = transcript.trim().split(/[.!?\n؛۔]+/).filter(Boolean);
-    const subject = lines[0]?.trim() || '';
+    // Split on sentence-ending punctuation (supports Urdu ۔ and . ! ?)
+    const lines = transcript.trim().split(/[.!?۔\n]+/).filter(Boolean);
+    const subject     = lines[0]?.trim() || '';
     const description = lines.slice(1).join('. ').trim() || lines[0]?.trim();
     onDraftComplete({ subject, description });
     resetTranscript();
-    setTranslatedText('');
   };
 
-  // ── Copy transcript ──────────────────────────────────────
+  // ── Copy ───────────────────────────────────────────────────────────
   const handleCopy = () => {
     if (!transcript) return;
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(transcript);
-      setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 1500);
-    }
+    navigator.clipboard?.writeText(transcript);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 1500);
   };
 
-  // ── Speak Transcript in Spiritual Voice ─────────────────
-  const handleSpeakTranscript = () => {
+  // ── Listen in Spiritual Voice ─────────────────────────────────────
+  const handleSpeak = () => {
     if (!transcript) return;
-    speak(transcript, {
-      lang,
-      rate: 0.82,
-      pitch: 0.68,
-      wordCount: false,
-    });
+    speak(transcript, { lang: currentLang, rate: 0.82, pitch: 0.68 });
   };
 
-  // ── Export Audio (.wav) ──────────────────────────────────
+  // ── Export Audio (.wav) ────────────────────────────────────────────
   const handleExportWav = async () => {
     if (!transcript) return;
-    await exportAudio(transcript, lang, 'voice-thought');
+    await exportAudio(transcript, currentLang, 'voice-thought');
   };
 
-  const displayText = transcript + (interimTranscript ? ` ${interimTranscript}` : '');
-  const isUrdu = lang === 'ur-PK' || containsUrdu(displayText);
+  const isUrdu = currentLang === 'ur-PK' || containsUrdu(transcript + interimTranscript);
 
   if (!isSupported) {
     return (
       <div className="voice-panel voice-panel-unsupported">
         <MicOff size={16} />
-        <span>Voice input is not supported in this browser. Please try Chrome, Edge, or the Android App.</span>
+        <span>Voice input is not supported in this browser. Please use Chrome, Edge, or the Android App.</span>
       </div>
     );
   }
 
   return (
     <div className={`voice-panel ${isCollapsed ? 'voice-panel-collapsed' : ''}`}>
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="voice-panel-header">
         <div className="voice-panel-title">
           <Mic size={16} />
@@ -241,8 +187,7 @@ export default function VoicePanel({ onTranscript, onDraftComplete, lang, setLan
             type="button"
             className="voice-collapse-btn"
             onClick={() => setIsCollapsed((v) => !v)}
-            title={isCollapsed ? 'Expand voice panel' : 'Collapse voice panel'}
-            aria-label="Toggle voice panel"
+            title={isCollapsed ? 'Show voice panel' : 'Hide voice panel'}
           >
             {isCollapsed ? '▼ Show Voice' : '▲ Hide'}
           </button>
@@ -251,61 +196,64 @@ export default function VoicePanel({ onTranscript, onDraftComplete, lang, setLan
 
       {!isCollapsed && (
         <div className="voice-panel-body">
-          {/* ── Language Switcher ── */}
+          {/* Language Selector */}
           <div className="voice-lang-row">
             <span className="voice-lang-label">Language:</span>
-            <div className="voice-lang-toggle" role="radiogroup" aria-label="Speech language">
+            <div className="voice-lang-toggle" role="radiogroup">
               <button
                 type="button"
-                className={`lang-pill ${lang === 'en-US' ? 'active' : ''}`}
-                onClick={() => setLang('en-US')}
+                className={`lang-pill ${currentLang === 'en-US' ? 'active' : ''}`}
+                onClick={() => { setCurrentLang('en-US'); setLang('en-US'); }}
               >
                 🇬🇧 English
               </button>
               <button
                 type="button"
-                className={`lang-pill ${lang === 'ur-PK' ? 'active' : ''}`}
-                onClick={() => setLang('ur-PK')}
+                className={`lang-pill ${currentLang === 'ur-PK' ? 'active' : ''}`}
+                onClick={() => { setCurrentLang('ur-PK'); setLang('ur-PK'); }}
               >
                 🇵🇰 اردو Urdu
               </button>
             </div>
+            <span className="voice-lang-hint">
+              {currentLang === 'ur-PK'
+                ? '🟢 Urdu mode — speak and text appears in اردو script'
+                : '🔵 English mode — speak in English'}
+            </span>
           </div>
 
-          {/* ── Microphone Action & Waveform ── */}
+          {/* Mic Button + Info */}
           <div className="voice-mic-container">
             <button
               type="button"
               className={`voice-mic-btn ${isListening ? 'active' : ''}`}
               onClick={isListening ? handleStopListening : handleStartListening}
-              aria-label={isListening ? 'Stop recording voice' : 'Start speaking'}
-              title={isListening ? 'Click to stop voice dictation' : 'Click to speak your thought'}
+              aria-label={isListening ? 'Stop recording' : 'Start speaking'}
+              title={isListening ? 'Tap to stop dictation' : 'Tap to start speaking'}
             >
               {isListening ? <MicOff size={24} /> : <Mic size={24} />}
             </button>
 
             <div className="voice-mic-info">
-              <strong>{isListening ? 'Speaking now...' : 'Click mic to speak'}</strong>
+              <strong>
+                {isListening
+                  ? (currentLang === 'ur-PK' ? 'سن رہا ہوں... (Listening)' : 'Listening...')
+                  : (currentLang === 'ur-PK' ? 'بولنے کے لیے مائیک دبائیں' : 'Click mic to start speaking')}
+              </strong>
               <span className="voice-mic-sub">
                 {isListening
-                  ? 'Say words clearly, or say "save" / "clear"'
-                  : 'Speak in Urdu or English to dictate your thought'}
+                  ? 'Speak naturally — text appears as you talk. Pause to finalize.'
+                  : `Speaks in ${currentLang === 'ur-PK' ? 'Urdu (اردو script)' : 'English'}`}
               </span>
             </div>
           </div>
 
-          {/* ── Live Audio Waveform Canvas ── */}
+          {/* Live Audio Waveform Canvas */}
           <div className={`waveform-wrapper ${isListening ? 'active' : ''}`}>
-            <canvas
-              ref={canvasRef}
-              className="waveform-canvas"
-              width={400}
-              height={44}
-              aria-hidden="true"
-            />
+            <canvas ref={canvasRef} className="waveform-canvas" width={400} height={44} aria-hidden="true" />
           </div>
 
-          {/* ── Real-time Transcript Preview ── */}
+          {/* Live Transcript Preview */}
           {(transcript || interimTranscript) && (
             <div
               className="transcript-box"
@@ -319,82 +267,60 @@ export default function VoicePanel({ onTranscript, onDraftComplete, lang, setLan
             </div>
           )}
 
-          {/* ── Error message ── */}
+          {/* Error */}
           {voiceError && (
-            <div className="voice-error-msg" role="alert">
-              ⚠️ {voiceError}
-            </div>
+            <div className="voice-error-msg" role="alert">⚠️ {voiceError}</div>
           )}
 
-          {/* ── Smart Action Bar ── */}
+          {/* Action Bar (shows only when there is transcript) */}
           {transcript && (
             <div className="voice-actions-toolbar">
-              {/* Magic Draft Auto-Fill */}
               <button
                 type="button"
                 className="voice-action-btn voice-draft-btn"
                 onClick={handleDraftFill}
-                title="Automatically set 1st sentence as Subject and rest as Description"
+                title="Set first sentence as Subject, rest as Description"
               >
                 <Zap size={14} />
                 <span>Auto-fill Post</span>
               </button>
 
-              {/* Real-time Translate */}
               <button
                 type="button"
                 className="voice-action-btn"
-                onClick={handleTranslate}
-                disabled={isTranslating}
-                title={isUrdu ? 'Translate Urdu → English' : 'Translate English → Urdu'}
-              >
-                <Languages size={14} />
-                <span>{isTranslating ? 'Translating...' : isUrdu ? 'Translate to English' : 'ترجمہ اردو'}</span>
-              </button>
-
-              {/* Listen back in spiritual voice */}
-              <button
-                type="button"
-                className="voice-action-btn"
-                onClick={handleSpeakTranscript}
+                onClick={handleSpeak}
                 disabled={isSpeaking}
-                title="Listen in deep spiritual male voice"
+                title="Listen back in deep spiritual male voice"
               >
                 <Volume2 size={14} />
                 <span>{isSpeaking ? 'Playing...' : 'Listen'}</span>
               </button>
 
-              {/* Export Audio File (.wav) directly */}
               <button
                 type="button"
                 className="voice-action-btn voice-export-btn"
                 onClick={handleExportWav}
                 disabled={isExporting}
-                title="Export this voice note directly as an audio file (.wav)"
+                title="Export as .wav audio file in heavy spiritual male voice"
               >
                 <Download size={14} />
                 <span>{isExporting ? 'Exporting...' : 'Export Audio (.wav)'}</span>
               </button>
 
-              {/* Copy Transcript */}
               <button
                 type="button"
                 className="voice-action-btn"
                 onClick={handleCopy}
-                title="Copy spoken transcript to clipboard"
+                title="Copy transcript to clipboard"
               >
                 <Copy size={14} />
                 <span>{copyFeedback ? 'Copied!' : 'Copy'}</span>
               </button>
 
-              {/* Clear */}
               <button
                 type="button"
                 className="voice-action-btn voice-clear-btn"
-                onClick={() => {
-                  resetTranscript();
-                  setTranslatedText('');
-                }}
+                onClick={() => resetTranscript()}
                 title="Clear transcript"
               >
                 <X size={14} />
@@ -403,38 +329,9 @@ export default function VoicePanel({ onTranscript, onDraftComplete, lang, setLan
             </div>
           )}
 
-          {/* ── Translation Result Card ── */}
-          {translatedText && (
-            <div
-              className="voice-translation-card"
-              dir={containsUrdu(translatedText) ? 'rtl' : 'ltr'}
-            >
-              <div className="voice-translation-head">
-                <span className="flex-inline">
-                  <Languages size={14} />
-                  <strong>Real-time Translation</strong>
-                </span>
-                <button
-                  type="button"
-                  className="voice-mini-btn"
-                  onClick={() => {
-                    if (navigator?.clipboard?.writeText) {
-                      navigator.clipboard.writeText(translatedText);
-                    }
-                  }}
-                  title="Copy translated text"
-                >
-                  <Copy size={12} /> Copy
-                </button>
-              </div>
-              <p className="voice-translation-text">{translatedText}</p>
-              {translateError && <small className="voice-error-hint">{translateError}</small>}
-            </div>
-          )}
-
-          {/* ── Hands-free voice commands footer ── */}
+          {/* Commands hint */}
           <div className="voice-commands-hint">
-            <span>💡 Hands-free commands: say <strong>"clear"</strong> or <strong>"stop"</strong> while speaking</span>
+            <span>💡 Say <strong>"clear"</strong> or <strong>"stop"</strong> to control hands-free</span>
           </div>
         </div>
       )}

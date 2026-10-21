@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { getFontFamilyCss } from './fontUtils';
+import { generateSpiritualVoiceWav, triggerDownload } from './audioExporter';
 import {
   BookOpen,
   CalendarDays,
   Check,
   ChevronLeft,
   Copy,
+  Download,
   Heart,
   Plus,
   Search,
@@ -36,7 +38,8 @@ export default function CollectionsView({
   onListenThought,
   activeSpeakingThoughtId,
 }) {
-  const [copiedId, setCopiedId] = useState(null);
+  const [copiedId,    setCopiedId]    = useState(null);
+  const [exportingId, setExportingId] = useState(null);
   const normalizedQuery = collectionSearchQuery.trim().toLowerCase();
 
   const handleQuickCopy = (e, thought) => {
@@ -46,6 +49,20 @@ export default function CollectionsView({
       setCopiedId(thought.id);
       setTimeout(() => setCopiedId(null), 1800);
     }
+  };
+
+  const handleExportAudio = async (e, thought) => {
+    e.stopPropagation();
+    if (exportingId === thought.id) return;
+    setExportingId(thought.id);
+    const fullText = `${thought.subject ? thought.subject + '. ' : ''}${thought.description || ''}`.trim();
+    if (!fullText) { setExportingId(null); return; }
+    try {
+      const wavBlob = await generateSpiritualVoiceWav(fullText, { speed: 0.82, pitch: 105 });
+      const safeName = (thought.subject || 'thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_').slice(0, 50);
+      triggerDownload(wavBlob, `${safeName}-spiritual-voice.wav`);
+    } catch { /* non-fatal */ }
+    setExportingId(null);
   };
 
   // Apply search + favorites filter (category is handled by tabs)
@@ -183,6 +200,20 @@ export default function CollectionsView({
           <span className="article-category-badge">
             <Tag size={11} /> {thought.category}
           </span>
+
+          {/* Export Audio button — under every post */}
+          <button
+            type="button"
+            className={`card-export-audio-btn ${exportingId === thought.id ? 'exporting' : ''}`}
+            onClick={(e) => handleExportAudio(e, thought)}
+            disabled={exportingId === thought.id}
+            title="Export spiritual voice audio (.wav)"
+            aria-label="Export audio"
+          >
+            <Download size={12} />
+            <span>{exportingId === thought.id ? 'Exporting...' : 'Export Audio'}</span>
+          </button>
+
           <span className="article-open">
             Open full view <ChevronLeft size={14} />
           </span>

@@ -1393,10 +1393,11 @@ export default function App() {
                   <VoicePanel
                     lang={voiceLang}
                     setLang={setVoiceLang}
-                    onTranscript={(text) => {
+                    onNewChunk={(chunk) => {
+                      // Each chunk is a NEW piece of final text — append it once
                       setFormData((c) => ({
                         ...c,
-                        description: c.description ? c.description + ' ' + text : text,
+                        description: c.description ? `${c.description} ${chunk}` : chunk,
                       }));
                     }}
                     onDraftComplete={({ subject, description }) => {

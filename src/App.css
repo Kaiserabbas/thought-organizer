@@ -2653,3 +2653,46 @@ h1 {
   color: #16a34a !important;
   background: #f0fdf4 !important;
 }
+
+/* ── Card Export Audio Button (under each post) ── */
+.card-export-audio-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.card-export-audio-btn:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.card-export-audio-btn:disabled,
+.card-export-audio-btn.exporting {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* Card bottom row — allow Export Audio to sit naturally */
+.card-bottom-row {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* Voice lang hint */
+.voice-lang-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 4px;
+}

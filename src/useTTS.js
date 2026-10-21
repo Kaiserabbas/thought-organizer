@@ -172,21 +172,29 @@ export function useTTS() {
   );
 
   /**
-   * exportAudio(text, lang, filename)
+   * exportAudio(text, langOrOptions, filename)
    * Generates a downloadable .wav audio file using deep male acoustic resonance.
+   * Accepts positional args: exportAudio(text, 'en-US', 'filename')
+   * OR an options object:   exportAudio(text, { lang: 'en-US', filename: 'x' })
    */
   const exportAudio = useCallback(
-    async (text, lang = 'en-US', filename = 'thought') => {
+    async (text, langOrOptions = 'en-US', filenameArg = 'thought') => {
       if (!text || !text.trim()) return false;
       setIsExporting(true);
+
+      // Normalize: accept both positional and object styles
+      const filename =
+        typeof langOrOptions === 'object'
+          ? (langOrOptions.filename || filenameArg)
+          : filenameArg;
 
       try {
         const cleanName = (filename || 'thought')
           .replace(/[^a-zA-Z0-9_\-\u0600-\u06FF]/g, '_')
-          .slice(0, 40);
+          .slice(0, 50);
 
         // Generate heavy spiritual male voice WAV via Web Audio API
-        const wavBlob = await generateSpiritualVoiceWav(text, { speed: 0.85, pitch: 105 });
+        const wavBlob = await generateSpiritualVoiceWav(text, { speed: 0.82, pitch: 105 });
         triggerDownload(wavBlob, `${cleanName}-spiritual-voice.wav`);
         return true;
       } catch (err) {
