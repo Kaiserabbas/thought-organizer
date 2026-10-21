@@ -10,13 +10,17 @@ import {
   Key,
   LogOut,
   Moon,
+  Play,
   Plus,
+  RotateCcw,
   RotateCw,
   Sparkles,
+  Square,
   Sun,
   Tag,
   Trash2,
   Upload,
+  Volume2,
 } from 'lucide-react';
 import { getGeminiApiKey, setGeminiApiKey, testGeminiApiKey } from './geminiService';
 
@@ -36,6 +40,15 @@ export default function SettingsView({
   onExportBackup,
   onImportBackup,
   onManualToken,
+  ttsRate = 0.85,
+  setTtsRate,
+  ttsPitch = 0.68,
+  setTtsPitch,
+  voiceEngine = 'existing',
+  setVoiceEngine,
+  isSpeaking = false,
+  onStopTTS,
+  onTestSpeak,
 }) {
   const [newCatInput, setNewCatInput] = useState('');
   const [catError, setCatError] = useState('');
@@ -45,7 +58,16 @@ export default function SettingsView({
   const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiApiKey());
   const [isGeminiTesting, setIsGeminiTesting] = useState(false);
   const [geminiStatusMsg, setGeminiStatusMsg] = useState({ text: '', type: '' });
+  const [resetFeedback, setResetFeedback] = useState(false);
   const fileInputRef = useRef(null);
+
+  const handleResetDefaults = () => {
+    if (setTtsRate) setTtsRate(0.85);
+    if (setTtsPitch) setTtsPitch(0.68);
+    if (setVoiceEngine) setVoiceEngine('existing');
+    setResetFeedback(true);
+    setTimeout(() => setResetFeedback(false), 2000);
+  };
 
   const handleSaveGeminiKey = async (e) => {
     if (e) e.preventDefault();
@@ -196,6 +218,220 @@ export default function SettingsView({
               </div>
             )}
           </form>
+        </section>
+
+        {/* ── Audio Playback Speed & Pitch Settings ── */}
+        <section className="settings-card full-width audio-settings-card">
+          <div className="card-section-heading">
+            <div className="settings-icon-badge audio-badge">
+              <Volume2 size={20} />
+            </div>
+            <div>
+              <h3>Audio Playback &amp; Voice Settings</h3>
+              <p className="card-subtitle">
+                Configure voice playback speed, voice pitch, and default voice engine (Existing is default)
+              </p>
+            </div>
+          </div>
+
+          {/* Voice Engine Toggle */}
+          <div className="audio-setting-block">
+            <div className="audio-setting-header">
+              <span className="audio-setting-title">Voice Engine:</span>
+              <span className="audio-setting-current-val">
+                {voiceEngine === 'gemini' ? 'Google Gemini AI (Studio Voice)' : 'Existing Browser Voice (Default)'}
+              </span>
+            </div>
+            <div className="voice-engine-toggle-group" role="radiogroup" aria-label="Voice Engine">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={voiceEngine === 'existing'}
+                className={`voice-engine-option-btn ${voiceEngine === 'existing' ? 'active' : ''}`}
+                onClick={() => setVoiceEngine && setVoiceEngine('existing')}
+              >
+                <div className="engine-option-main">
+                  <strong>Existing Browser Voice</strong>
+                  <span className="badge-default">DEFAULT</span>
+                </div>
+                <span className="engine-option-desc">
+                  Fast, 100% offline, zero latency. Built-in deep male resonance with customizable speed and pitch.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="radio"
+                aria-checked={voiceEngine === 'gemini'}
+                className={`voice-engine-option-btn ${voiceEngine === 'gemini' ? 'active' : ''}`}
+                onClick={() => setVoiceEngine && setVoiceEngine('gemini')}
+              >
+                <div className="engine-option-main">
+                  <span className="flex-inline"><Sparkles size={14} /> <strong>Google Gemini AI Voice</strong></span>
+                  {geminiKeyInput.trim() ? (
+                    <span className="badge-ready">ACTIVE</span>
+                  ) : (
+                    <span className="badge-key-needed">KEY NEEDED</span>
+                  )}
+                </div>
+                <span className="engine-option-desc">
+                  Studio-grade heavy spiritual male baritone (gemini-3.8-flash-tts). Requires free API key.
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Audio Playback Speed (Rate) */}
+          <div className="audio-setting-block">
+            <div className="audio-setting-header">
+              <label htmlFor="audio-speed-slider" className="audio-setting-title">
+                Play Audio Speed:
+              </label>
+              <span className="audio-setting-current-val">
+                <strong>{Number(ttsRate).toFixed(2)}x</strong>
+                <span className="audio-hint-tag">
+                  {ttsRate < 0.8 ? 'Slow / Meditative' : ttsRate <= 0.9 ? 'Calm (Default)' : ttsRate <= 1.1 ? 'Normal' : 'Fast'}
+                </span>
+              </span>
+            </div>
+
+            <div className="slider-control-row">
+              <span className="slider-bound">0.50x</span>
+              <input
+                id="audio-speed-slider"
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.05"
+                value={ttsRate}
+                onChange={(e) => setTtsRate && setTtsRate(parseFloat(e.target.value))}
+                className="audio-range-slider"
+                aria-label="Playback speed"
+              />
+              <span className="slider-bound">2.00x</span>
+            </div>
+
+            <div className="audio-presets-row">
+              <span className="presets-label">Speed Presets:</span>
+              {[
+                { label: '0.75x Calm', val: 0.75 },
+                { label: '0.85x Default', val: 0.85 },
+                { label: '1.00x Normal', val: 1.0 },
+                { label: '1.25x Brisk', val: 1.25 },
+                { label: '1.50x Fast', val: 1.5 },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  className={`audio-preset-btn ${Math.abs(ttsRate - p.val) < 0.02 ? 'active' : ''}`}
+                  onClick={() => setTtsRate && setTtsRate(p.val)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Audio Playback Pitch */}
+          <div className="audio-setting-block">
+            <div className="audio-setting-header">
+              <label htmlFor="audio-pitch-slider" className="audio-setting-title">
+                Play Audio Pitch:
+              </label>
+              <span className="audio-setting-current-val">
+                <strong>{Number(ttsPitch).toFixed(2)}</strong>
+                <span className="audio-hint-tag">
+                  {ttsPitch <= 0.72 ? 'Deep Spiritual (Default)' : ttsPitch <= 0.9 ? 'Warm Baritone' : ttsPitch <= 1.1 ? 'Standard' : 'High Pitch'}
+                </span>
+              </span>
+            </div>
+
+            <div className="slider-control-row">
+              <span className="slider-bound">0.50 (Deep)</span>
+              <input
+                id="audio-pitch-slider"
+                type="range"
+                min="0.5"
+                max="1.5"
+                step="0.02"
+                value={ttsPitch}
+                onChange={(e) => setTtsPitch && setTtsPitch(parseFloat(e.target.value))}
+                className="audio-range-slider"
+                aria-label="Voice pitch"
+              />
+              <span className="slider-bound">1.50 (High)</span>
+            </div>
+
+            <div className="audio-presets-row">
+              <span className="presets-label">Pitch Presets:</span>
+              {[
+                { label: '0.68 Deep (Default)', val: 0.68 },
+                { label: '0.82 Warm', val: 0.82 },
+                { label: '1.00 Standard', val: 1.0 },
+                { label: '1.20 Light', val: 1.2 },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  className={`audio-preset-btn ${Math.abs(ttsPitch - p.val) < 0.02 ? 'active' : ''}`}
+                  onClick={() => setTtsPitch && setTtsPitch(p.val)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Test Listen Buttons & Reset */}
+          <div className="audio-actions-row">
+            <div className="audio-test-buttons">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  if (isSpeaking) {
+                    onStopTTS?.();
+                  } else {
+                    onTestSpeak?.(
+                      'Peace be upon you. This is a sample of your selected voice speed and pitch settings.',
+                      'en-US'
+                    );
+                  }
+                }}
+              >
+                {isSpeaking ? <Square size={15} /> : <Play size={15} />}
+                <span>{isSpeaking ? 'Stop Test' : 'Test English Audio'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  if (isSpeaking) {
+                    onStopTTS?.();
+                  } else {
+                    onTestSpeak?.(
+                      'السلام علیکم۔ یہ آپ کی منتخب کردہ آواز کی رفتار اور پچ کا نمونہ ہے۔',
+                      'ur-PK'
+                    );
+                  }
+                }}
+              >
+                {isSpeaking ? <Square size={15} /> : <Play size={15} />}
+                <span>{isSpeaking ? 'Stop Test' : 'Test Urdu Audio'}</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="action-link reset-defaults-btn"
+              onClick={handleResetDefaults}
+              title="Reset speed to 0.85x, pitch to 0.68, and engine to Existing"
+            >
+              <RotateCcw size={14} />
+              <span>{resetFeedback ? '✓ Reset to Existing Defaults' : 'Reset to Existing Defaults'}</span>
+            </button>
+          </div>
         </section>
 
         {/* ── Google Drive & Memory Sync ── */}

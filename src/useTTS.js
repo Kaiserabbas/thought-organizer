@@ -210,7 +210,7 @@ export function useTTS() {
         rate = 0.85,
         pitch = 0.68,
         wordCount = false,
-        useGemini = true,
+        useGemini = false,
         onEnd,
         onError,
       } = options;

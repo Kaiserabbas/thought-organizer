@@ -312,7 +312,17 @@ export default function App() {
   // ── Voice & Audio state ──
   const [voiceLang, setVoiceLang] = useState('en-US');
   const [showTTSPlayer, setShowTTSPlayer] = useState(false);
-  const [ttsRate, setTtsRate] = useState(0.85);
+  const [ttsRate, setTtsRate] = useState(() => {
+    const saved = localStorage.getItem('tts_playback_rate');
+    return saved ? parseFloat(saved) : 0.85;
+  });
+  const [ttsPitch, setTtsPitch] = useState(() => {
+    const saved = localStorage.getItem('tts_playback_pitch');
+    return saved ? parseFloat(saved) : 0.68;
+  });
+  const [voiceEngine, setVoiceEngine] = useState(() => {
+    return localStorage.getItem('tts_voice_engine') || 'existing';
+  });
   const [ttsLang, setTtsLang] = useState('en-US');
   const [activeSpeakingThoughtId, setActiveSpeakingThoughtId] = useState(null);
   const [showTranslated, setShowTranslated] = useState(false);
@@ -415,6 +425,25 @@ export default function App() {
       document.documentElement.setAttribute('data-theme', theme);
     }
   }, [theme]);
+
+  // Persist Audio settings
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tts_playback_rate', String(ttsRate));
+    }
+  }, [ttsRate]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tts_playback_pitch', String(ttsPitch));
+    }
+  }, [ttsPitch]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tts_voice_engine', voiceEngine);
+    }
+  }, [voiceEngine]);
 
   useEffect(() => {
     if (categories.length && formData.category && !categories.includes(formData.category)) {
@@ -1048,9 +1077,9 @@ export default function App() {
     setActiveSpeakingThoughtId(thought.id);
     speak(fullText, {
       lang,
-      rate: 0.85,
-      pitch: 0.68,
-      useGemini: true,
+      rate: ttsRate,
+      pitch: ttsPitch,
+      useGemini: voiceEngine === 'gemini',
       onEnd: () => setActiveSpeakingThoughtId(null),
       onError: (err) => {
         setActiveSpeakingThoughtId(null);
@@ -1086,8 +1115,8 @@ export default function App() {
     speak(fullText, {
       lang: detectedLang,
       rate: ttsRate,
-      pitch: 0.68,
-      useGemini: true,
+      pitch: ttsPitch,
+      useGemini: voiceEngine === 'gemini',
       onEnd: () => setActiveSpeakingThoughtId(null),
       onError: (err) => {
         setActiveSpeakingThoughtId(null);
@@ -1349,9 +1378,9 @@ export default function App() {
                         setActiveSpeakingThoughtId('draft');
                         speak(draftText, {
                           lang: isUr ? 'ur-PK' : voiceLang,
-                          rate: 0.85,
-                          pitch: 0.68,
-                          useGemini: true,
+                          rate: ttsRate,
+                          pitch: ttsPitch,
+                          useGemini: voiceEngine === 'gemini',
                           onEnd: () => setActiveSpeakingThoughtId(null),
                           onError: (err) => {
                             setActiveSpeakingThoughtId(null);
@@ -1361,7 +1390,7 @@ export default function App() {
                           },
                         });
                       }}
-                      title="Listen to draft in deep spiritual male voice (Gemini TTS)"
+                      title={voiceEngine === 'gemini' ? 'Listen to draft in Gemini studio voice' : 'Listen to draft in voice'}
                     >
                       {isLoadingAudio && activeSpeakingThoughtId === 'draft' ? (
                         <Loader2 size={14} className="spin-icon" />
@@ -1446,6 +1475,9 @@ export default function App() {
                   <VoicePanel
                     lang={voiceLang}
                     setLang={setVoiceLang}
+                    ttsRate={ttsRate}
+                    ttsPitch={ttsPitch}
+                    voiceEngine={voiceEngine}
                     onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
                     onNewChunk={(chunk) => {
                       // Each chunk is a NEW piece of final text — append with space & capitalize English
@@ -1813,6 +1845,22 @@ export default function App() {
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             onManualToken={handleManualToken}
+            ttsRate={ttsRate}
+            setTtsRate={setTtsRate}
+            ttsPitch={ttsPitch}
+            setTtsPitch={setTtsPitch}
+            voiceEngine={voiceEngine}
+            setVoiceEngine={setVoiceEngine}
+            isSpeaking={isSpeaking}
+            onStopTTS={ttsStop}
+            onTestSpeak={(text, lang) => {
+              speak(text, {
+                lang,
+                rate: ttsRate,
+                pitch: ttsPitch,
+                useGemini: voiceEngine === 'gemini',
+              });
+            }}
           />
         )}
       </main>

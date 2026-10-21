@@ -23,7 +23,16 @@ const isMobileDevice = () => {
  * @param {function} props.setLang            — setter for lang
  * @param {function} props.onRequireGeminiKey — trigger to open Gemini API key modal
  */
-export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang, onRequireGeminiKey }) {
+export default function VoicePanel({
+  onNewChunk,
+  onDraftComplete,
+  lang,
+  setLang,
+  ttsRate = 0.85,
+  ttsPitch = 0.68,
+  voiceEngine = 'existing',
+  onRequireGeminiKey,
+}) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
 
@@ -225,14 +234,14 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
     setTimeout(() => setCopyFeedback(false), 1500);
   };
 
-  // ── Listen in Spiritual Voice (Gemini TTS) ──────────────────────────
+  // ── Listen in Voice (respects settings rate, pitch & engine) ──
   const handleSpeak = () => {
     if (!transcript) return;
     speak(transcript, {
       lang: currentLang,
-      rate: 0.85,
-      pitch: 0.68,
-      useGemini: true,
+      rate: ttsRate,
+      pitch: ttsPitch,
+      useGemini: voiceEngine === 'gemini',
       onError: (err) => {
         if (err?.code === 'MISSING_GEMINI_KEY' && onRequireGeminiKey) {
           onRequireGeminiKey();
@@ -378,7 +387,7 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
                 className="voice-action-btn"
                 onClick={handleSpeak}
                 disabled={isSpeaking || isLoadingAudio}
-                title="Listen back in deep spiritual male voice (Gemini TTS)"
+                title={voiceEngine === 'gemini' ? 'Listen back in Gemini spiritual voice' : 'Listen back in voice'}
               >
                 {isLoadingAudio ? <Loader2 size={14} className="spin-icon" /> : <Volume2 size={14} />}
                 <span>{isLoadingAudio ? 'Loading...' : isSpeaking ? 'Playing...' : 'Listen'}</span>
