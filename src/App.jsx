@@ -9,7 +9,7 @@ import ConfirmModal from './ConfirmModal';
 import GeminiKeyModal from './GeminiKeyModal';
 import VoicePanel from './VoicePanel';
 import { useTTS } from './useTTS';
-import { containsUrdu } from './useVoice';
+import { containsUrdu, formatEnglishSentence } from './useVoice';
 import { useTranslate } from './useTranslate';
 import './App.css';
 import {
@@ -30,6 +30,7 @@ import {
   Italic,
   Languages,
   List,
+  Loader2,
   LogOut,
   Moon,
   Palette,
@@ -320,7 +321,7 @@ export default function App() {
   const [isTranslatingThought, setIsTranslatingThought] = useState(false);
   const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
 
-  const { speak, stop: ttsStop, pause: ttsPause, resume: ttsResume, isSpeaking, isPaused, exportAudio } = useTTS();
+  const { speak, stop: ttsStop, pause: ttsPause, resume: ttsResume, isSpeaking, isPaused, isLoadingAudio, exportAudio } = useTTS();
   const { translate } = useTranslate();
 
   const closeSelectedThought = useCallback(() => {
@@ -1036,7 +1037,7 @@ export default function App() {
   };
 
   const handleQuickListenThought = (thought) => {
-    if (isSpeaking && activeSpeakingThoughtId === thought.id) {
+    if ((isSpeaking || isLoadingAudio) && activeSpeakingThoughtId === thought.id) {
       ttsStop();
       setActiveSpeakingThoughtId(null);
       return;
@@ -1047,14 +1048,21 @@ export default function App() {
     setActiveSpeakingThoughtId(thought.id);
     speak(fullText, {
       lang,
-      rate: 0.82,
+      rate: 0.85,
       pitch: 0.68,
+      useGemini: true,
       onEnd: () => setActiveSpeakingThoughtId(null),
+      onError: (err) => {
+        setActiveSpeakingThoughtId(null);
+        if (err?.code === 'MISSING_GEMINI_KEY') {
+          setIsGeminiModalOpen(true);
+        }
+      },
     });
   };
 
   const handleToggleTTSPlayer = () => {
-    if (showTTSPlayer && isSpeaking) {
+    if (showTTSPlayer && (isSpeaking || isLoadingAudio)) {
       ttsStop();
       setActiveSpeakingThoughtId(null);
     }
@@ -1074,13 +1082,20 @@ export default function App() {
     const fullText = `${selectedThought.subject ? selectedThought.subject + '. ' : ''}${selectedThought.description || ''}`.trim();
     if (!fullText) return;
     const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
+    setActiveSpeakingThoughtId(selectedThought.id);
     speak(fullText, {
       lang: detectedLang,
       rate: ttsRate,
       pitch: 0.68,
+      useGemini: true,
       onEnd: () => setActiveSpeakingThoughtId(null),
+      onError: (err) => {
+        setActiveSpeakingThoughtId(null);
+        if (err?.code === 'MISSING_GEMINI_KEY') {
+          setIsGeminiModalOpen(true);
+        }
+      },
     });
-    setActiveSpeakingThoughtId(selectedThought.id);
   };
 
   const handleStopTTS = () => {
@@ -1261,6 +1276,7 @@ export default function App() {
             onCopyThought={handleCopyThought}
             onListenThought={handleQuickListenThought}
             activeSpeakingThoughtId={activeSpeakingThoughtId}
+            isLoadingAudio={isLoadingAudio}
             onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
           />
         )}
@@ -1317,9 +1333,9 @@ export default function App() {
 
                     <button
                       type="button"
-                      className={`composer-pill-btn ${isSpeaking && activeSpeakingThoughtId === 'draft' ? 'active' : ''}`}
+                      className={`composer-pill-btn ${(isSpeaking || isLoadingAudio) && activeSpeakingThoughtId === 'draft' ? 'active' : ''}`}
                       onClick={() => {
-                        if (isSpeaking && activeSpeakingThoughtId === 'draft') {
+                        if ((isSpeaking || isLoadingAudio) && activeSpeakingThoughtId === 'draft') {
                           ttsStop();
                           setActiveSpeakingThoughtId(null);
                           return;
@@ -1333,15 +1349,32 @@ export default function App() {
                         setActiveSpeakingThoughtId('draft');
                         speak(draftText, {
                           lang: isUr ? 'ur-PK' : voiceLang,
-                          rate: 0.82,
+                          rate: 0.85,
                           pitch: 0.68,
+                          useGemini: true,
                           onEnd: () => setActiveSpeakingThoughtId(null),
+                          onError: (err) => {
+                            setActiveSpeakingThoughtId(null);
+                            if (err?.code === 'MISSING_GEMINI_KEY') {
+                              setIsGeminiModalOpen(true);
+                            }
+                          },
                         });
                       }}
-                      title="Listen to draft in deep spiritual male voice"
+                      title="Listen to draft in deep spiritual male voice (Gemini TTS)"
                     >
-                      {isSpeaking && activeSpeakingThoughtId === 'draft' ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                      {isSpeaking && activeSpeakingThoughtId === 'draft' ? 'Stop Voice' : 'Listen Voice'}
+                      {isLoadingAudio && activeSpeakingThoughtId === 'draft' ? (
+                        <Loader2 size={14} className="spin-icon" />
+                      ) : isSpeaking && activeSpeakingThoughtId === 'draft' ? (
+                        <VolumeX size={14} />
+                      ) : (
+                        <Volume2 size={14} />
+                      )}
+                      {isLoadingAudio && activeSpeakingThoughtId === 'draft'
+                        ? 'Loading...'
+                        : isSpeaking && activeSpeakingThoughtId === 'draft'
+                        ? 'Stop Voice'
+                        : 'Listen Voice'}
                     </button>
 
                     <button
@@ -1415,18 +1448,26 @@ export default function App() {
                     setLang={setVoiceLang}
                     onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
                     onNewChunk={(chunk) => {
-                      // Each chunk is a NEW piece of final text — append with space
+                      // Each chunk is a NEW piece of final text — append with space & capitalize English
                       setFormData((c) => {
                         const prev = (c.description || '').trim();
-                        if (!prev) return { ...c, description: chunk };
-                        return { ...c, description: `${prev} ${chunk}` };
+                        if (!prev) {
+                          const formatted = containsUrdu(chunk) ? chunk : formatEnglishSentence(chunk);
+                          return { ...c, description: formatted };
+                        }
+                        const combined = `${prev} ${chunk}`;
+                        const formatted = containsUrdu(combined) ? combined : formatEnglishSentence(combined);
+                        return { ...c, description: formatted };
                       });
                     }}
                     onDraftComplete={({ subject, description }) => {
+                      const isUrdu = containsUrdu(`${subject} ${description}`);
+                      const fmtSub = !isUrdu && subject ? formatEnglishSentence(subject) : subject;
+                      const fmtDesc = !isUrdu && description ? formatEnglishSentence(description) : description;
                       setFormData((c) => ({
                         ...c,
-                        subject: subject || c.subject,
-                        description: description || c.description,
+                        subject: fmtSub || c.subject,
+                        description: fmtDesc || c.description,
                       }));
                     }}
                   />
@@ -1803,15 +1844,21 @@ export default function App() {
                       {copiedThought ? <Check size={17} /> : <Copy size={17} />}
                     </button>
 
-                    {/* Listen in Spiritual Voice */}
+                    {/* Listen in Spiritual Voice (Gemini TTS) */}
                     <button
                       type="button"
-                      className={`icon-button tts-listen-btn ${showTTSPlayer ? 'active' : ''} ${isSpeaking && activeSpeakingThoughtId === selectedThought.id ? 'active-speaking' : ''}`}
+                      className={`icon-button tts-listen-btn ${showTTSPlayer ? 'active' : ''} ${(isSpeaking || isLoadingAudio) && activeSpeakingThoughtId === selectedThought.id ? 'active-speaking' : ''}`}
                       onClick={handleToggleTTSPlayer}
                       aria-label="Listen in spiritual voice"
-                      title={showTTSPlayer ? 'Hide spiritual player' : 'Listen in spiritual voice'}
+                      title={showTTSPlayer ? 'Hide spiritual player' : 'Listen in spiritual voice (Gemini TTS)'}
                     >
-                      {isSpeaking && activeSpeakingThoughtId === selectedThought.id ? <VolumeX size={17} /> : <Volume2 size={17} />}
+                      {isLoadingAudio && activeSpeakingThoughtId === selectedThought.id ? (
+                        <Loader2 size={17} className="spin-icon" />
+                      ) : isSpeaking && activeSpeakingThoughtId === selectedThought.id ? (
+                        <VolumeX size={17} />
+                      ) : (
+                        <Volume2 size={17} />
+                      )}
                     </button>
 
                     {/* Export Audio (.wav) */}

@@ -1,5 +1,5 @@
 // useVoice.js — Bilingual voice recognition: auto-detects Urdu & English
-// Native Web Speech API — free, no backend, no paid APIs.
+// Native Web Speech API — free, no backend, works on desktop and mobile browsers.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transliterateRomanUrduOffline, isLikelyRomanUrdu } from './urduTransliterator';
@@ -15,15 +15,42 @@ const SpeechRecognitionAPI =
 
 /** Detect whether text contains Urdu/Arabic script characters */
 export function containsUrdu(text) {
+  if (!text || typeof text !== 'string') return false;
   return /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
+}
+
+/**
+ * Capitalizes the first letter of English sentences and standalone pronoun 'I'
+ * Examples:
+ * "hello how are you. i am fine." -> "Hello how are you. I am fine."
+ * "i think i'm good" -> "I think I'm good"
+ */
+export function formatEnglishSentence(text) {
+  if (!text || typeof text !== 'string') return text;
+  if (containsUrdu(text)) return text;
+
+  let formatted = text;
+
+  // 1. Capitalize first letter at start of string or after sentence delimiters (. ! ?) or newlines
+  formatted = formatted.replace(/(^|[.!?]\s+|\n\s*)([a-z])/g, (_, prefix, char) => {
+    return prefix + char.toUpperCase();
+  });
+
+  // 2. Capitalize standalone pronoun "i" and contractions like "i'm", "i've", "i'll", "i'd"
+  formatted = formatted.replace(/\b(i)\b/g, 'I');
+  formatted = formatted.replace(/\b(i)('m|'ve|'ll|'d)\b/gi, (_, _i, contraction) => {
+    return 'I' + contraction.toLowerCase();
+  });
+
+  return formatted;
 }
 
 /**
  * useVoice — Bilingual STT hook
  * - 'ur-PK' → outputs native Urdu Unicode script (not Roman transliteration)
- * - 'en-US' → outputs English text
+ * - 'en-US' → outputs English text with capitalized first words
  * - Auto-detects language from recognized text and switches automatically
- * - Auto-restarts after natural pauses (continuous dictation)
+ * - Mobile-optimized: handles browser audio focus and auto-restarts smoothly
  * - Deduplicates chunks so text never repeats
  *
  * @param {Object}   options
@@ -40,6 +67,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
   const recognitionRef   = useRef(null);
   const shouldRestartRef = useRef(false);
+  const restartTimerRef  = useRef(null);
   const onNewChunkRef    = useRef(onNewChunk);
   const onCommandRef     = useRef(onCommand);
   const seenChunksRef    = useRef(new Set()); // dedup — prevent repeated text
@@ -51,6 +79,10 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
   const stopListening = useCallback(() => {
     shouldRestartRef.current = false;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch { /* ignore */ }
       recognitionRef.current = null;
@@ -67,7 +99,13 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
   const startListening = useCallback((forceLang) => {
     if (!isSupported) {
-      setError('Voice input not supported. Please use Chrome or Edge.');
+      setError('Voice input not supported in this browser. Please use Chrome, Edge, or Android Chrome.');
+      return;
+    }
+
+    // On mobile devices, microphone access requires a secure context (HTTPS or localhost)
+    if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      setError('Microphone access requires HTTPS or localhost on mobile browsers.');
       return;
     }
 
@@ -80,21 +118,29 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     }
 
     const useLang = forceLang || currentLang;
-    const recognition = new SpeechRecognitionAPI();
+    let recognition;
+    try {
+      recognition = new SpeechRecognitionAPI();
+    } catch (err) {
+      setError(`Cannot initialize speech recognition: ${err.message}`);
+      return;
+    }
 
     // continuous=true keeps it alive; interim gives live preview as you speak
     recognition.continuous     = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    // This setting tells Chrome to output Urdu script (Unicode) not Roman letters
     recognition.lang = useLang;
 
-    recognition.onstart = () => { setIsListening(true); setError(null); };
+    recognition.onstart = () => {
+      setIsListening(true);
+      setError(null);
+    };
 
     recognition.onresult = (event) => {
       let interimText = '';
 
-      // Only process new results from resultIndex — avoids processing old results
+      // Only process new results from resultIndex — avoids re-processing old results
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const rawText = result[0].transcript;
@@ -128,6 +174,11 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
             setCurrentLang('ur-PK');
           }
 
+          // Format English capitalization if English
+          if (!isUrdu) {
+            processedChunk = formatEnglishSentence(processedChunk);
+          }
+
           // For every pause: add a space and "۔" for Urdu and "." for English
           const pausePunctuation = isUrdu ? '۔' : '.';
           const hasCustomPunctuation = /[؟?!]$/.test(processedChunk.trim());
@@ -139,8 +190,16 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
             finalChunk = `${cleanChunk}${pausePunctuation}`;
           }
 
-          // Append to local transcript with space
-          setTranscript((prev) => (prev ? `${prev.trim()} ${finalChunk}` : finalChunk));
+          if (!isUrdu) {
+            finalChunk = formatEnglishSentence(finalChunk);
+          }
+
+          // Append to local transcript with space and format
+          setTranscript((prev) => {
+            if (!prev) return finalChunk;
+            const combined = `${prev.trim()} ${finalChunk}`;
+            return isUrdu ? combined : formatEnglishSentence(combined);
+          });
           setInterimTranscript('');
 
           // Fire parent callback with ONLY this new chunk
@@ -154,7 +213,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
       if (interimText) {
         const isUrduMode = useLang === 'ur-PK' || currentLang === 'ur-PK';
         const displayInterim = isUrduMode ? transliterateRomanUrduOffline(interimText) : interimText;
-        setInterimTranscript(displayInterim);
+        setInterimTranscript(isUrduMode ? displayInterim : formatEnglishSentence(displayInterim));
       } else {
         setInterimTranscript('');
       }
@@ -162,12 +221,19 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
     recognition.onerror = (event) => {
       if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-        setError('Microphone access denied. Allow mic permission in browser settings.');
+        setError('Microphone access denied. Please allow microphone permission in browser settings.');
         shouldRestartRef.current = false;
+        setIsListening(false);
       } else if (event.error === 'network') {
-        setError('Network error. For Urdu offline: download Urdu voice in Android language settings.');
+        // Transient network error on mobile
+        setError('Network error with voice engine. Retrying connection...');
       } else if (event.error === 'no-speech') {
-        setInterimTranscript(''); // silence — not an error
+        // Natural pause / silence — not a fatal error
+        setInterimTranscript('');
+      } else if (event.error === 'audio-capture') {
+        setError('Microphone unavailable or in use by another app.');
+        shouldRestartRef.current = false;
+        setIsListening(false);
       } else if (event.error !== 'aborted') {
         setError(`Voice recognition error: ${event.error}`);
       }
@@ -177,20 +243,22 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
       setIsListening(false);
       setInterimTranscript('');
 
-      // Auto-restart after pause — this enables true continuous dictation
-      if (shouldRestartRef.current && recognitionRef.current === recognition) {
-        setTimeout(() => {
+      // Auto-restart after pause — this enables continuous dictation on both desktop and mobile
+      if (shouldRestartRef.current) {
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch { /* ignore */ }
+          recognitionRef.current = null;
+        }
+
+        if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = setTimeout(() => {
           if (!shouldRestartRef.current) return;
-          if (recognitionRef.current !== recognition) return;
           try {
-            recognition.start();
-            setIsListening(true);
-          } catch {
-            // Browser won't let us restart the same instance; create fresh one
-            recognitionRef.current = null;
-            if (shouldRestartRef.current) startListening(useLang);
+            startListening(useLang);
+          } catch (e) {
+            console.warn('Auto-restart recognition error:', e);
           }
-        }, 200);
+        }, 150);
       }
     };
 
@@ -207,6 +275,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
   useEffect(() => () => {
     shouldRestartRef.current = false;
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch { /* ignore */ }
     }

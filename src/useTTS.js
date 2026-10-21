@@ -1,11 +1,13 @@
 // useTTS.js — Text-to-Speech + Audio Export Hook
-// Uses browser-native Web Speech API + Web Audio API. 100% free & offline.
+// Uses Gemini 3.8 Flash TTS for authentic spiritual male voice when API key is present.
+// Automatically falls back to browser-native Web Speech API + Web Audio API. 100% free.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { generateSpiritualVoiceWav, triggerDownload } from './audioExporter';
+import { getOrGenerateSpiritualSpeech, hasGeminiApiKey } from './geminiService';
 
 const isSupported =
-  typeof window !== 'undefined' && 'speechSynthesis' in window;
+  typeof window !== 'undefined' && ('speechSynthesis' in window || typeof Audio !== 'undefined');
 
 /** Pick a preferred deep, heavy, spiritual male voice */
 export function pickDeepMaleVoice(voices, lang) {
@@ -66,14 +68,18 @@ export function pickDeepMaleVoice(voices, lang) {
 export function useTTS() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [voices, setVoices] = useState([]);
+
   const synthRef = useRef(typeof window !== 'undefined' ? window.speechSynthesis : null);
   const utteranceRef = useRef(null);
+  const audioRef = useRef(null);
+  const currentBlobUrlRef = useRef(null);
 
-  // Load voices asynchronously
+  // Load voices asynchronously for offline browser fallback
   useEffect(() => {
-    if (!isSupported) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
     const synth = synthRef.current;
     if (!synth) return;
 
@@ -93,52 +99,194 @@ export function useTTS() {
   }, []);
 
   const stop = useCallback(() => {
-    if (!isSupported || !synthRef.current) return;
-    synthRef.current.cancel();
+    // 1. Stop HTML5 audio (Gemini TTS)
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      audioRef.current = null;
+    }
+
+    if (currentBlobUrlRef.current) {
+      try {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+      } catch {
+        /* ignore */
+      }
+      currentBlobUrlRef.current = null;
+    }
+
+    // 2. Stop browser speechSynthesis
+    if (synthRef.current) {
+      try {
+        synthRef.current.cancel();
+      } catch {
+        /* ignore */
+      }
+      utteranceRef.current = null;
+    }
+
     setIsSpeaking(false);
     setIsPaused(false);
-    utteranceRef.current = null;
+    setIsLoadingAudio(false);
   }, []);
 
   const pause = useCallback(() => {
-    if (!isSupported || !synthRef.current || !isSpeaking) return;
-    synthRef.current.pause();
-    setIsPaused(true);
+    if (audioRef.current && isSpeaking) {
+      try {
+        audioRef.current.pause();
+      } catch {
+        /* ignore */
+      }
+      setIsPaused(true);
+      return;
+    }
+
+    if (synthRef.current && isSpeaking) {
+      try {
+        synthRef.current.pause();
+      } catch {
+        /* ignore */
+      }
+      setIsPaused(true);
+    }
   }, [isSpeaking]);
 
   const resume = useCallback(() => {
-    if (!isSupported || !synthRef.current || !isPaused) return;
-    synthRef.current.resume();
-    setIsPaused(false);
+    if (audioRef.current && isPaused) {
+      try {
+        audioRef.current.play();
+      } catch {
+        /* ignore */
+      }
+      setIsPaused(false);
+      return;
+    }
+
+    if (synthRef.current && isPaused) {
+      try {
+        synthRef.current.resume();
+      } catch {
+        /* ignore */
+      }
+      setIsPaused(false);
+    }
   }, [isPaused]);
+
+  // Clean up playback on unmount
+  useEffect(() => {
+    const synth = synthRef.current;
+    return () => {
+      if (audioRef.current) {
+        try { audioRef.current.pause(); } catch { /* ignore */ }
+        audioRef.current = null;
+      }
+      if (currentBlobUrlRef.current) {
+        try { URL.revokeObjectURL(currentBlobUrlRef.current); } catch { /* ignore */ }
+      }
+      if (synth) {
+        try { synth.cancel(); } catch { /* ignore */ }
+      }
+    };
+  }, []);
 
   /**
    * speak(text, options)
-   * Plays the text with deep, heavy, spiritual male characteristics
+   * Uses Gemini 3.8 Flash TTS for heavy spiritual male voice when API key is present.
+   * Seamlessly falls back to deep male browser voice if offline or no key.
    */
   const speak = useCallback(
-    (text, options = {}) => {
-      if (!isSupported || !synthRef.current || !text) return;
+    async (text, options = {}) => {
+      if (!text || !text.trim()) return;
+
+      // Stop any current playback
+      stop();
+
+      const {
+        lang = 'en-US',
+        rate = 0.85,
+        pitch = 0.68,
+        wordCount = false,
+        useGemini = true,
+        onEnd,
+        onError,
+      } = options;
+
+      let spokenContent = text.trim();
+      if (wordCount) {
+        const count = spokenContent.split(/\s+/).filter(Boolean).length;
+        spokenContent = `${count} words. ${spokenContent}`;
+      }
+
+      // ── Option A: Gemini 3.8 Flash TTS (Real Human Spiritual Male Voice) ──
+      if (useGemini && hasGeminiApiKey()) {
+        setIsLoadingAudio(true);
+        try {
+          const audioBlob = await getOrGenerateSpiritualSpeech(spokenContent, {
+            voice: 'Charon', // Heavy, resonant spiritual male baritone
+          });
+
+          const blobUrl = URL.createObjectURL(audioBlob);
+          currentBlobUrlRef.current = blobUrl;
+
+          const audio = new Audio(blobUrl);
+          audioRef.current = audio;
+
+          // Apply slight rate scaling if specified
+          if (rate && rate !== 1.0) {
+            audio.playbackRate = Math.min(2.0, Math.max(0.6, rate));
+          }
+
+          audio.onplay = () => {
+            setIsSpeaking(true);
+            setIsPaused(false);
+            setIsLoadingAudio(false);
+          };
+
+          audio.onended = () => {
+            setIsSpeaking(false);
+            setIsPaused(false);
+            setIsLoadingAudio(false);
+            audioRef.current = null;
+            if (currentBlobUrlRef.current) {
+              URL.revokeObjectURL(currentBlobUrlRef.current);
+              currentBlobUrlRef.current = null;
+            }
+            if (onEnd) onEnd();
+          };
+
+          audio.onerror = (e) => {
+            console.warn('Audio element error:', e);
+            setIsSpeaking(false);
+            setIsPaused(false);
+            setIsLoadingAudio(false);
+            audioRef.current = null;
+            if (onError) onError(e);
+          };
+
+          await audio.play();
+          return;
+        } catch (err) {
+          console.warn('Gemini TTS playback failed, falling back to browser speech:', err);
+          setIsLoadingAudio(false);
+          // Fall through to browser SpeechSynthesis
+        }
+      }
+
+      // ── Option B: Browser SpeechSynthesis Fallback ──
+      if (!synthRef.current) {
+        if (onError) onError(new Error('Speech synthesis not available'));
+        return;
+      }
 
       const synth = synthRef.current;
       synth.cancel();
 
-      const {
-        lang = 'en-US',
-        rate = 0.82,     // Calmer, spiritual cadence
-        pitch = 0.68,    // Deep, heavy baritone
-        wordCount = false,
-        onEnd,
-      } = options;
-
       const currentVoices = synth.getVoices().length ? synth.getVoices() : voices;
       const voice = pickDeepMaleVoice(currentVoices, lang);
-
-      let spokenContent = text;
-      if (wordCount) {
-        const count = text.trim().split(/\s+/).filter(Boolean).length;
-        spokenContent = `${count} words. ${text}`;
-      }
 
       const utterance = new SpeechSynthesisUtterance(spokenContent);
       utterance.lang = lang;
@@ -150,39 +298,40 @@ export function useTTS() {
       utterance.onstart = () => {
         setIsSpeaking(true);
         setIsPaused(false);
+        setIsLoadingAudio(false);
       };
 
       utterance.onend = () => {
         setIsSpeaking(false);
         setIsPaused(false);
+        setIsLoadingAudio(false);
         utteranceRef.current = null;
         if (onEnd) onEnd();
       };
 
-      utterance.onerror = () => {
+      utterance.onerror = (e) => {
         setIsSpeaking(false);
         setIsPaused(false);
+        setIsLoadingAudio(false);
         utteranceRef.current = null;
+        if (onError) onError(e);
       };
 
       utteranceRef.current = utterance;
       synth.speak(utterance);
     },
-    [voices]
+    [voices, stop]
   );
 
   /**
    * exportAudio(text, langOrOptions, filename)
-   * Generates a downloadable .wav audio file using deep male acoustic resonance.
-   * Accepts positional args: exportAudio(text, 'en-US', 'filename')
-   * OR an options object:   exportAudio(text, { lang: 'en-US', filename: 'x' })
+   * Generates a downloadable .wav audio file in heavy spiritual male voice.
    */
   const exportAudio = useCallback(
     async (text, langOrOptions = 'en-US', filenameArg = 'thought') => {
       if (!text || !text.trim()) return { success: false, error: 'Empty text' };
       setIsExporting(true);
 
-      // Normalize: accept both positional and object styles
       const filename =
         typeof langOrOptions === 'object'
           ? (langOrOptions.filename || filenameArg)
@@ -193,7 +342,6 @@ export function useTTS() {
           .replace(/[^a-zA-Z0-9_\-\u0600-\u06FF]/g, '_')
           .slice(0, 50);
 
-        // Generate heavy spiritual male voice WAV using Gemini 3.8 Flash TTS
         const wavBlob = await generateSpiritualVoiceWav(text);
         triggerDownload(wavBlob, `${cleanName}-spiritual-voice.wav`);
         return { success: true };
@@ -214,6 +362,7 @@ export function useTTS() {
     resume,
     isSpeaking,
     isPaused,
+    isLoadingAudio,
     isExporting,
     voices,
     exportAudio,

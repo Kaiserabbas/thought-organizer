@@ -9,6 +9,7 @@ import {
   Copy,
   Download,
   Heart,
+  Loader2,
   Plus,
   Search,
   Sparkles,
@@ -37,6 +38,7 @@ export default function CollectionsView({
   onCopyThought,
   onListenThought,
   activeSpeakingThoughtId,
+  isLoadingAudio,
   onRequireGeminiKey,
 }) {
   const [copiedId,    setCopiedId]    = useState(null);
@@ -105,6 +107,7 @@ export default function CollectionsView({
   const renderThoughtCard = (thought) => {
     const cardColorClass = `card-color-${thought.cardColor || 'default'}`;
     const isSpeakingThis = activeSpeakingThoughtId === thought.id;
+    const isLoadingThis = isSpeakingThis && isLoadingAudio;
 
     return (
       <div
@@ -124,18 +127,30 @@ export default function CollectionsView({
             <CalendarDays size={13} /> {formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}
           </span>
           <div className="card-quick-actions">
-            {/* Quick Listen in Spiritual Voice */}
+            {/* Quick Listen in Spiritual Voice (Gemini TTS) */}
             <button
               type="button"
-              className={`card-quick-btn listen-btn ${isSpeakingThis ? 'active' : ''}`}
+              className={`card-quick-btn listen-btn ${isSpeakingThis ? 'active' : ''} ${isLoadingThis ? 'loading' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 if (onListenThought) onListenThought(thought);
               }}
-              title={isSpeakingThis ? 'Stop listening' : 'Listen in spiritual voice'}
+              title={
+                isLoadingThis
+                  ? 'Generating Gemini spiritual voice...'
+                  : isSpeakingThis
+                  ? 'Stop listening'
+                  : 'Listen in spiritual voice (Gemini TTS)'
+              }
               aria-label="Listen to thought"
             >
-              {isSpeakingThis ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              {isLoadingThis ? (
+                <Loader2 size={14} className="spin-icon" />
+              ) : isSpeakingThis ? (
+                <VolumeX size={14} />
+              ) : (
+                <Volume2 size={14} />
+              )}
             </button>
 
             {/* Quick Copy */}

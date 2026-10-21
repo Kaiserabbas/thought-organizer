@@ -1,17 +1,27 @@
 // VoicePanel.jsx — Bilingual Voice Input (Urdu in Urdu script / English in English)
-// Native Web Speech API — zero paid APIs, works offline after browser cache.
+// Native Web Speech API — works on mobile & desktop browsers. Zero paid APIs required.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Copy, Download, Mic, MicOff, Volume2, X, Zap } from 'lucide-react';
-import { useVoice, containsUrdu } from './useVoice';
+import { Copy, Download, Mic, MicOff, Volume2, X, Zap, Loader2 } from 'lucide-react';
+import { useVoice, containsUrdu, formatEnglishSentence } from './useVoice';
 import { useTTS } from './useTTS';
+
+/** Detect if running on mobile device to avoid microphone collision */
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1)
+  );
+};
 
 /**
  * VoicePanel
- * @param {function} props.onNewChunk      — called with each new spoken chunk
- * @param {function} props.onDraftComplete — called with { subject, description }
- * @param {string}   props.lang            — 'en-US' | 'ur-PK'
- * @param {function} props.setLang         — setter for lang
+ * @param {function} props.onNewChunk         — called with each new spoken chunk
+ * @param {function} props.onDraftComplete    — called with { subject, description }
+ * @param {string}   props.lang               — 'en-US' | 'ur-PK'
+ * @param {function} props.setLang            — setter for lang
+ * @param {function} props.onRequireGeminiKey — trigger to open Gemini API key modal
  */
 export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang, onRequireGeminiKey }) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
@@ -23,7 +33,7 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
   const audioCtxRef  = useRef(null);
   const micStreamRef = useRef(null);
 
-  const { speak, isSpeaking, exportAudio, isExporting } = useTTS();
+  const { speak, isSpeaking, isLoadingAudio, exportAudio, isExporting } = useTTS();
 
   // ── Voice commands from speech ─────────────────────────────────────
   const handleCommand = useCallback((command) => {
@@ -64,7 +74,44 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
   }, [currentLang, lang, setLang]);
 
   // ── Waveform Visualizer ────────────────────────────────────────────
+  // On mobile devices, acquiring getUserMedia steals mic focus from SpeechRecognition,
+  // causing mobile SpeechRecognition to abort immediately.
+  // We use live analyser on desktop, and smooth animated synthetic wave on mobile.
   const startWaveform = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+
+    // Mobile fallback: synthetic wave animation (no microphone collision)
+    if (isMobileDevice()) {
+      let step = 0;
+      const drawSynthetic = () => {
+        animFrameRef.current = requestAnimationFrame(drawSynthetic);
+        step += 0.08;
+        ctx.clearRect(0, 0, width, height);
+        const bars = 24;
+        const bw = width / bars;
+        for (let i = 0; i < bars; i++) {
+          const wave = Math.sin(step + i * 0.4) * 0.5 + 0.5;
+          const bh = Math.max(4, wave * (height - 6));
+          ctx.fillStyle = '#125d01';
+          ctx.globalAlpha = 0.4 + wave * 0.6;
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(i * bw + 2, height - bh, bw - 4, bh, 2);
+          } else {
+            ctx.rect(i * bw + 2, height - bh, bw - 4, bh);
+          }
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      };
+      drawSynthetic();
+      return;
+    }
+
+    // Desktop: live audio analyser
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       micStreamRef.current = stream;
@@ -77,16 +124,12 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
       analyserRef.current = analyser;
       audioCtx.createMediaStreamSource(stream).connect(analyser);
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
       const bufLen = analyser.frequencyBinCount;
       const data   = new Uint8Array(bufLen);
 
       const draw = () => {
         animFrameRef.current = requestAnimationFrame(draw);
         analyser.getByteFrequencyData(data);
-        const { width, height } = canvas;
         ctx.clearRect(0, 0, width, height);
         const bw = (width / bufLen) * 2.2;
         let x = 0;
@@ -107,7 +150,26 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
         ctx.globalAlpha = 1;
       };
       draw();
-    } catch { /* non-fatal — waveform is cosmetic */ }
+    } catch {
+      // If mic access fails or permission denied, fallback to synthetic animation
+      let step = 0;
+      const drawSynthetic = () => {
+        animFrameRef.current = requestAnimationFrame(drawSynthetic);
+        step += 0.08;
+        ctx.clearRect(0, 0, width, height);
+        const bars = 24;
+        const bw = width / bars;
+        for (let i = 0; i < bars; i++) {
+          const wave = Math.sin(step + i * 0.4) * 0.5 + 0.5;
+          const bh = Math.max(4, wave * (height - 6));
+          ctx.fillStyle = '#125d01';
+          ctx.globalAlpha = 0.4 + wave * 0.6;
+          ctx.fillRect(i * bw + 2, height - bh, bw - 4, bh);
+        }
+        ctx.globalAlpha = 1;
+      };
+      drawSynthetic();
+    }
   }, []);
 
   const stopWaveform = useCallback(() => {
@@ -140,11 +202,17 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
     // Split on sentence-ending punctuation (supports Urdu ۔ and . ! ?)
     const lines = transcript.trim().split(/[.!?۔\n]+/).filter(Boolean);
     const subjectRaw = lines[0]?.trim() || '';
-    const subject = subjectRaw.replace(/[.۔!?؟\s]+$/, '');
+    let subject = subjectRaw.replace(/[.۔!?؟\s]+$/, '');
     let description = lines.slice(1).join(separator).trim() || subject;
     if (description && !/[.۔!?؟]$/.test(description)) {
       description += endPunctuation;
     }
+
+    if (!isUrdu) {
+      subject = formatEnglishSentence(subject);
+      description = formatEnglishSentence(description);
+    }
+
     onDraftComplete({ subject, description });
     resetTranscript();
   };
@@ -157,10 +225,20 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
     setTimeout(() => setCopyFeedback(false), 1500);
   };
 
-  // ── Listen in Spiritual Voice ─────────────────────────────────────
+  // ── Listen in Spiritual Voice (Gemini TTS) ──────────────────────────
   const handleSpeak = () => {
     if (!transcript) return;
-    speak(transcript, { lang: currentLang, rate: 0.82, pitch: 0.68 });
+    speak(transcript, {
+      lang: currentLang,
+      rate: 0.85,
+      pitch: 0.68,
+      useGemini: true,
+      onError: (err) => {
+        if (err?.code === 'MISSING_GEMINI_KEY' && onRequireGeminiKey) {
+          onRequireGeminiKey();
+        }
+      },
+    });
   };
 
   // ── Export Audio (.wav) ────────────────────────────────────────────
@@ -178,7 +256,7 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
     return (
       <div className="voice-panel voice-panel-unsupported">
         <MicOff size={16} />
-        <span>Voice input is not supported in this browser. Please use Chrome, Edge, or the Android App.</span>
+        <span>Voice input is not supported in this browser. Please use Chrome, Edge, or Android Chrome.</span>
       </div>
     );
   }
@@ -227,8 +305,8 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
             </div>
             <span className="voice-lang-hint">
               {currentLang === 'ur-PK'
-                ? '🟢 Urdu mode — speak and text appears in اردو script'
-                : '🔵 English mode — speak in English'}
+                ? '🟢 Urdu mode — speaks into authentic اردو script'
+                : '🔵 English mode — first word capitalized automatically'}
             </span>
           </div>
 
@@ -252,7 +330,7 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
               </strong>
               <span className="voice-mic-sub">
                 {isListening
-                  ? 'Speak naturally — text appears as you talk. Pause to finalize.'
+                  ? 'Speak naturally — pauses add proper punctuation automatically.'
                   : `Speaks in ${currentLang === 'ur-PK' ? 'Urdu (اردو script)' : 'English'}`}
               </span>
             </div>
@@ -299,11 +377,11 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang,
                 type="button"
                 className="voice-action-btn"
                 onClick={handleSpeak}
-                disabled={isSpeaking}
-                title="Listen back in deep spiritual male voice"
+                disabled={isSpeaking || isLoadingAudio}
+                title="Listen back in deep spiritual male voice (Gemini TTS)"
               >
-                <Volume2 size={14} />
-                <span>{isSpeaking ? 'Playing...' : 'Listen'}</span>
+                {isLoadingAudio ? <Loader2 size={14} className="spin-icon" /> : <Volume2 size={14} />}
+                <span>{isLoadingAudio ? 'Loading...' : isSpeaking ? 'Playing...' : 'Listen'}</span>
               </button>
 
               <button

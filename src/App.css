@@ -2887,3 +2887,19 @@ h1 {
 .paste-text-btn:hover {
   opacity: 0.8;
 }
+
+
+/* ── Speaker & Spinner Enhancements ── */
+.spin-icon {
+  animation: spin 0.8s linear infinite;
+}
+
+.card-quick-btn.listen-btn.loading {
+  color: #d97706 !important;
+  background: #fef3c7 !important;
+  border-color: #fde68a !important;
+}
+
+.icon-button.tts-listen-btn.active-speaking {
+  animation: pulseRecording 1.8s ease-in-out infinite;
+}

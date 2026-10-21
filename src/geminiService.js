@@ -219,6 +219,7 @@ export async function generateGeminiSpiritualSpeech(text, { voice = 'Charon' } =
     ],
     response_format: {
       type: 'audio',
+      mime_type: 'audio/wav',
     },
     generation_config: {
       speech_config: [
@@ -273,4 +274,20 @@ export async function generateGeminiSpiritualSpeech(text, { voice = 'Charon' } =
   }
 
   return new Blob([byteNumbers], { type: 'audio/wav' });
+}
+
+// In-memory cache for generated spiritual speech audio Blobs
+const spiritualAudioCache = new Map();
+
+/**
+ * Get or generate spiritual speech audio Blob (cached in memory)
+ */
+export async function getOrGenerateSpiritualSpeech(text, options = {}) {
+  const cacheKey = text.trim();
+  if (spiritualAudioCache.has(cacheKey)) {
+    return spiritualAudioCache.get(cacheKey);
+  }
+  const blob = await generateGeminiSpiritualSpeech(text, options);
+  spiritualAudioCache.set(cacheKey, blob);
+  return blob;
 }
