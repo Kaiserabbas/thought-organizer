@@ -179,7 +179,7 @@ export function useTTS() {
    */
   const exportAudio = useCallback(
     async (text, langOrOptions = 'en-US', filenameArg = 'thought') => {
-      if (!text || !text.trim()) return false;
+      if (!text || !text.trim()) return { success: false, error: 'Empty text' };
       setIsExporting(true);
 
       // Normalize: accept both positional and object styles
@@ -193,13 +193,13 @@ export function useTTS() {
           .replace(/[^a-zA-Z0-9_\-\u0600-\u06FF]/g, '_')
           .slice(0, 50);
 
-        // Generate heavy spiritual male voice WAV via Web Audio API
-        const wavBlob = await generateSpiritualVoiceWav(text, { speed: 0.82, pitch: 105 });
+        // Generate heavy spiritual male voice WAV using Gemini 3.8 Flash TTS
+        const wavBlob = await generateSpiritualVoiceWav(text);
         triggerDownload(wavBlob, `${cleanName}-spiritual-voice.wav`);
-        return true;
+        return { success: true };
       } catch (err) {
         console.error('Audio export error:', err);
-        return false;
+        return { success: false, error: err.message, code: err.code };
       } finally {
         setIsExporting(false);
       }

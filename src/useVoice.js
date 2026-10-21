@@ -2,6 +2,7 @@
 // Native Web Speech API — free, no backend, no paid APIs.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { transliterateRomanUrduOffline, isLikelyRomanUrdu } from './urduTransliterator';
 
 const isSupported =
   typeof window !== 'undefined' &&
@@ -110,28 +111,41 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
             if (lower === 'stop'    || lower === 'بند کرو') { onCommandRef.current('stop'); stopListening(); continue; }
           }
 
+          // Convert to Urdu script if in Urdu mode or if text is recognized as Roman Urdu
+          let processedChunk = chunk;
+          const isUrduMode = useLang === 'ur-PK' || currentLang === 'ur-PK';
+          if (isUrduMode || isLikelyRomanUrdu(chunk)) {
+            processedChunk = transliterateRomanUrduOffline(chunk);
+          }
+
           // Dedup: skip if we sent this exact chunk already in this session
-          if (seenChunksRef.current.has(chunk)) continue;
-          seenChunksRef.current.add(chunk);
+          if (seenChunksRef.current.has(processedChunk)) continue;
+          seenChunksRef.current.add(processedChunk);
 
           // Auto-switch language display if Urdu script detected in output
-          if (containsUrdu(chunk) && useLang !== 'ur-PK') {
+          if (containsUrdu(processedChunk) && useLang !== 'ur-PK') {
             setCurrentLang('ur-PK');
           }
 
           // Append to local transcript
-          setTranscript((prev) => prev ? `${prev} ${chunk}` : chunk);
+          setTranscript((prev) => prev ? `${prev} ${processedChunk}` : processedChunk);
           setInterimTranscript('');
 
           // Fire parent callback with ONLY this new chunk
-          if (onNewChunkRef.current) onNewChunkRef.current(chunk);
+          if (onNewChunkRef.current) onNewChunkRef.current(processedChunk);
 
         } else {
           interimText += rawText;
         }
       }
 
-      setInterimTranscript(interimText);
+      if (interimText) {
+        const isUrduMode = useLang === 'ur-PK' || currentLang === 'ur-PK';
+        const displayInterim = isUrduMode ? transliterateRomanUrduOffline(interimText) : interimText;
+        setInterimTranscript(displayInterim);
+      } else {
+        setInterimTranscript('');
+      }
     };
 
     recognition.onerror = (event) => {

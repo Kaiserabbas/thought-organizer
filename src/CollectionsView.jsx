@@ -37,6 +37,7 @@ export default function CollectionsView({
   onCopyThought,
   onListenThought,
   activeSpeakingThoughtId,
+  onRequireGeminiKey,
 }) {
   const [copiedId,    setCopiedId]    = useState(null);
   const [exportingId, setExportingId] = useState(null);
@@ -58,10 +59,14 @@ export default function CollectionsView({
     const fullText = `${thought.subject ? thought.subject + '. ' : ''}${thought.description || ''}`.trim();
     if (!fullText) { setExportingId(null); return; }
     try {
-      const wavBlob = await generateSpiritualVoiceWav(fullText, { speed: 0.82, pitch: 105 });
+      const wavBlob = await generateSpiritualVoiceWav(fullText);
       const safeName = (thought.subject || 'thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_').slice(0, 50);
       triggerDownload(wavBlob, `${safeName}-spiritual-voice.wav`);
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      if (err.code === 'MISSING_GEMINI_KEY' || err.message?.includes('Gemini API key')) {
+        if (onRequireGeminiKey) onRequireGeminiKey();
+      }
+    }
     setExportingId(null);
   };
 

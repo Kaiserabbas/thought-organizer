@@ -13,7 +13,7 @@ import { useTTS } from './useTTS';
  * @param {string}   props.lang            — 'en-US' | 'ur-PK'
  * @param {function} props.setLang         — setter for lang
  */
-export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang }) {
+export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang, onRequireGeminiKey }) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
 
@@ -159,7 +159,10 @@ export default function VoicePanel({ onNewChunk, onDraftComplete, lang, setLang 
   // ── Export Audio (.wav) ────────────────────────────────────────────
   const handleExportWav = async () => {
     if (!transcript) return;
-    await exportAudio(transcript, currentLang, 'voice-thought');
+    const res = await exportAudio(transcript, currentLang, 'voice-thought');
+    if (res && res.code === 'MISSING_GEMINI_KEY') {
+      if (onRequireGeminiKey) onRequireGeminiKey();
+    }
   };
 
   const isUrdu = currentLang === 'ur-PK' || containsUrdu(transcript + interimTranscript);

@@ -6,6 +6,7 @@ import { GoogleDriveService } from './googleDrive';
 import CollectionsView from './CollectionsView';
 import SettingsView from './SettingsView';
 import ConfirmModal from './ConfirmModal';
+import GeminiKeyModal from './GeminiKeyModal';
 import VoicePanel from './VoicePanel';
 import { useTTS } from './useTTS';
 import { containsUrdu } from './useVoice';
@@ -317,6 +318,7 @@ export default function App() {
   const [translatedThought, setTranslatedThought] = useState(null);
   const [isExportingAudio, setIsExportingAudio] = useState(false);
   const [isTranslatingThought, setIsTranslatingThought] = useState(false);
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
 
   const { speak, stop: ttsStop, pause: ttsPause, resume: ttsResume, isSpeaking, isPaused, exportAudio } = useTTS();
   const { translate } = useTranslate();
@@ -1093,8 +1095,17 @@ export default function App() {
     setIsExportingAudio(true);
     const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
     const filename = `${(selectedThought.subject || 'spiritual-thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
-    await exportAudio(fullText, { lang: detectedLang, filename });
+    const res = await exportAudio(fullText, { lang: detectedLang, filename });
     setIsExportingAudio(false);
+
+    if (res && res.code === 'MISSING_GEMINI_KEY') {
+      setIsGeminiModalOpen(true);
+      return;
+    }
+    if (res && !res.success) {
+      showPasteToast(`Export failed: ${res.error || 'Check connection'}`);
+      return;
+    }
     showPasteToast('Spiritual voice audio (.wav) exported!');
   };
 
@@ -1250,6 +1261,7 @@ export default function App() {
             onCopyThought={handleCopyThought}
             onListenThought={handleQuickListenThought}
             activeSpeakingThoughtId={activeSpeakingThoughtId}
+            onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
           />
         )}
 
@@ -1345,8 +1357,16 @@ export default function App() {
                         setIsExportingAudio(true);
                         const isUr = containsUrdu(draftText);
                         const filename = `${(formData.subject || 'thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
-                        await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename });
+                        const res = await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename });
                         setIsExportingAudio(false);
+                        if (res && res.code === 'MISSING_GEMINI_KEY') {
+                          setIsGeminiModalOpen(true);
+                          return;
+                        }
+                        if (res && !res.success) {
+                          showPasteToast(`Export failed: ${res.error || 'Check connection'}`);
+                          return;
+                        }
                         showPasteToast('Spiritual voice audio (.wav) exported!');
                       }}
                       title="Export spiritual voice audio (.wav)"
@@ -1393,6 +1413,7 @@ export default function App() {
                   <VoicePanel
                     lang={voiceLang}
                     setLang={setVoiceLang}
+                    onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
                     onNewChunk={(chunk) => {
                       // Each chunk is a NEW piece of final text — append it once
                       setFormData((c) => ({
@@ -2339,6 +2360,15 @@ export default function App() {
           if (confirmModal.action) confirmModal.action();
         }}
         onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* ── Gemini AI Setup Modal ── */}
+      <GeminiKeyModal
+        isOpen={isGeminiModalOpen}
+        onClose={() => setIsGeminiModalOpen(false)}
+        onSuccess={() => {
+          showPasteToast('Gemini connected! Studio voice & Urdu AI ready.');
+        }}
       />
     </div>
   );

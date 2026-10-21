@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
 import {
+  Check,
   CloudLightning,
   Database,
   Download,
+  ExternalLink,
   Heart,
   HelpCircle,
   Key,
@@ -10,11 +12,13 @@ import {
   Moon,
   Plus,
   RotateCw,
+  Sparkles,
   Sun,
   Tag,
   Trash2,
   Upload,
 } from 'lucide-react';
+import { getGeminiApiKey, setGeminiApiKey, testGeminiApiKey } from './geminiService';
 
 export default function SettingsView({
   theme,
@@ -38,7 +42,31 @@ export default function SettingsView({
   const [showOAuthHelp, setShowOAuthHelp] = useState(false);
   const [showManualToken, setShowManualToken] = useState(false);
   const [manualTokenInput, setManualTokenInput] = useState('');
+  const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiApiKey());
+  const [isGeminiTesting, setIsGeminiTesting] = useState(false);
+  const [geminiStatusMsg, setGeminiStatusMsg] = useState({ text: '', type: '' });
   const fileInputRef = useRef(null);
+
+  const handleSaveGeminiKey = async (e) => {
+    if (e) e.preventDefault();
+    setGeminiStatusMsg({ text: '', type: '' });
+    const cleanKey = geminiKeyInput.trim();
+    if (!cleanKey) {
+      setGeminiApiKey('');
+      setGeminiStatusMsg({ text: 'API key cleared', type: 'info' });
+      return;
+    }
+    setIsGeminiTesting(true);
+    try {
+      await testGeminiApiKey(cleanKey);
+      setGeminiApiKey(cleanKey);
+      setGeminiStatusMsg({ text: 'Gemini connected successfully! Studio voice & Urdu AI active.', type: 'success' });
+    } catch (err) {
+      setGeminiStatusMsg({ text: `Connection failed: ${err.message}`, type: 'error' });
+    } finally {
+      setIsGeminiTesting(false);
+    }
+  };
 
   const handleAddSubmit = (e) => {
     e.preventDefault();
@@ -105,6 +133,69 @@ export default function SettingsView({
               <span>Dark Mode</span>
             </button>
           </div>
+        </section>
+
+        {/* ── Google Gemini AI Configuration ── */}
+        <section className="settings-card gemini-settings-card">
+          <div className="card-section-heading">
+            <div className="settings-icon-badge gemini-badge">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h3>Google Gemini AI (Studio Voice & Urdu Voice Typing)</h3>
+              <p className="card-subtitle">
+                Powers authentic heavy spiritual male voice generation (<code>gemini-3.8-flash-tts</code>) and real-time Urdu script typing
+              </p>
+            </div>
+          </div>
+
+          <div className="sync-status-row">
+            <span className="status-label">AI Voice Status:</span>
+            <span className={`status-pill ${geminiKeyInput.trim() ? 'connected' : ''}`}>
+              {geminiKeyInput.trim() ? '🟢 Active (Studio Voice & Urdu AI)' : '⚪ Not Configured'}
+            </span>
+          </div>
+
+          <form onSubmit={handleSaveGeminiKey} className="gemini-settings-form">
+            <label className="field">
+              <span className="field-label-row">
+                <span className="flex-inline"><Key size={14} /> Gemini API Key</span>
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ai-studio-link"
+                >
+                  Get free key <ExternalLink size={12} />
+                </a>
+              </span>
+              <div className="gemini-input-group">
+                <input
+                  type="password"
+                  value={geminiKeyInput}
+                  onChange={(e) => {
+                    setGeminiKeyInput(e.target.value);
+                    setGeminiStatusMsg({ text: '', type: '' });
+                  }}
+                  placeholder="Paste your free Gemini API key (AIzaSy...)"
+                />
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isGeminiTesting}
+                >
+                  {isGeminiTesting ? 'Testing...' : 'Save & Connect'}
+                </button>
+              </div>
+            </label>
+
+            {geminiStatusMsg.text && (
+              <div className={`gemini-status-alert ${geminiStatusMsg.type}`}>
+                {geminiStatusMsg.type === 'success' && <Check size={14} />}
+                <span>{geminiStatusMsg.text}</span>
+              </div>
+            )}
+          </form>
         </section>
 
         {/* ── Google Drive & Memory Sync ── */}
