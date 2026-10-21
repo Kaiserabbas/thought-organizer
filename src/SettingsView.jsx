@@ -64,7 +64,7 @@ export default function SettingsView({
   const handleResetDefaults = () => {
     if (setTtsRate) setTtsRate(0.85);
     if (setTtsPitch) setTtsPitch(0.68);
-    if (setVoiceEngine) setVoiceEngine('existing');
+    if (setVoiceEngine) setVoiceEngine('gemini');
     setResetFeedback(true);
     setTimeout(() => setResetFeedback(false), 2000);
   };
@@ -239,26 +239,10 @@ export default function SettingsView({
             <div className="audio-setting-header">
               <span className="audio-setting-title">Voice Engine:</span>
               <span className="audio-setting-current-val">
-                {voiceEngine === 'gemini' ? 'Google Gemini AI (Studio Voice)' : 'Existing Browser Voice (Default)'}
+                {voiceEngine === 'gemini' ? 'Google Gemini AI (Studio Spiritual Voice)' : 'Offline Browser Voice'}
               </span>
             </div>
             <div className="voice-engine-toggle-group" role="radiogroup" aria-label="Voice Engine">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={voiceEngine === 'existing'}
-                className={`voice-engine-option-btn ${voiceEngine === 'existing' ? 'active' : ''}`}
-                onClick={() => setVoiceEngine && setVoiceEngine('existing')}
-              >
-                <div className="engine-option-main">
-                  <strong>Existing Browser Voice</strong>
-                  <span className="badge-default">DEFAULT</span>
-                </div>
-                <span className="engine-option-desc">
-                  Fast, 100% offline, zero latency. Built-in deep male resonance with customizable speed and pitch.
-                </span>
-              </button>
-
               <button
                 type="button"
                 role="radio"
@@ -268,14 +252,26 @@ export default function SettingsView({
               >
                 <div className="engine-option-main">
                   <span className="flex-inline"><Sparkles size={14} /> <strong>Google Gemini AI Voice</strong></span>
-                  {geminiKeyInput.trim() ? (
-                    <span className="badge-ready">ACTIVE</span>
-                  ) : (
-                    <span className="badge-key-needed">KEY NEEDED</span>
-                  )}
+                  <span className="badge-default">SPIRITUAL MALE</span>
                 </div>
                 <span className="engine-option-desc">
-                  Studio-grade heavy spiritual male baritone (gemini-3.8-flash-tts). Requires free API key.
+                  Authentic deep spiritual male baritone (Charon). Perfect native Urdu pronunciation and English dictation.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="radio"
+                aria-checked={voiceEngine === 'existing'}
+                className={`voice-engine-option-btn ${voiceEngine === 'existing' ? 'active' : ''}`}
+                onClick={() => setVoiceEngine && setVoiceEngine('existing')}
+              >
+                <div className="engine-option-main">
+                  <strong>Browser Speech Voice</strong>
+                  <span className="badge-key-needed">OFFLINE ONLY</span>
+                </div>
+                <span className="engine-option-desc">
+                  Standard device speech synthesis for offline use without internet connection.
                 </span>
               </button>
             </div>

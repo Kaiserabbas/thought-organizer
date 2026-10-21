@@ -321,7 +321,7 @@ export default function App() {
     return saved ? parseFloat(saved) : 0.68;
   });
   const [voiceEngine, setVoiceEngine] = useState(() => {
-    return localStorage.getItem('tts_voice_engine') || 'existing';
+    return localStorage.getItem('tts_voice_engine') || 'gemini';
   });
   const [ttsLang, setTtsLang] = useState('en-US');
   const [activeSpeakingThoughtId, setActiveSpeakingThoughtId] = useState(null);

@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { generateSpiritualVoiceWav, triggerDownload } from './audioExporter';
 import { getOrGenerateSpiritualSpeech, hasGeminiApiKey } from './geminiService';
+import { containsUrdu } from './useVoice';
 
 const isSupported =
   typeof window !== 'undefined' && ('speechSynthesis' in window || typeof Audio !== 'undefined');
@@ -15,17 +16,16 @@ export function pickDeepMaleVoice(voices, lang) {
 
   const isUrdu = lang === 'ur-PK' || (typeof lang === 'string' && lang.startsWith('ur'));
 
-  // If Urdu is requested, look for Urdu or Arabic native voices first
+  // If Urdu is requested, look ONLY for genuine Urdu voices — NEVER Arabic!
+  // Arabic speech synthesis ruins Urdu pronunciation with foreign accent.
   if (isUrdu) {
     const urduVoice = voices.find(
-      (v) => v.lang.startsWith('ur') || v.lang.includes('Urdu')
+      (v) =>
+        v.lang.startsWith('ur') ||
+        v.lang.toLowerCase().includes('urdu') ||
+        v.name.toLowerCase().includes('urdu')
     );
     if (urduVoice) return urduVoice;
-
-    const arabicVoice = voices.find(
-      (v) => v.lang.startsWith('ar') || v.lang.includes('Arabic')
-    );
-    if (arabicVoice) return arabicVoice;
   }
 
   // Preferred deep male English voices across Windows, Chrome, Android, macOS
@@ -210,7 +210,7 @@ export function useTTS() {
         rate = 0.85,
         pitch = 0.68,
         wordCount = false,
-        useGemini = false,
+        useGemini = true,
         onEnd,
         onError,
       } = options;
@@ -221,8 +221,18 @@ export function useTTS() {
         spokenContent = `${count} words. ${spokenContent}`;
       }
 
+      const isUrduText =
+        containsUrdu(spokenContent) ||
+        lang === 'ur-PK' ||
+        (typeof lang === 'string' && lang.startsWith('ur'));
+
+      // Use Gemini TTS when:
+      // 1. Gemini API key is available and useGemini is enabled (Default)
+      // 2. OR text is Urdu and Gemini API key is available (authentic Urdu speech)
+      const shouldTryGemini = hasGeminiApiKey() && (useGemini || isUrduText);
+
       // ── Option A: Gemini 3.8 Flash TTS (Real Human Spiritual Male Voice) ──
-      if (useGemini && hasGeminiApiKey()) {
+      if (shouldTryGemini) {
         setIsLoadingAudio(true);
         try {
           const audioBlob = await getOrGenerateSpiritualSpeech(spokenContent, {
