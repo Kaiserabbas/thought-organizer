@@ -13,6 +13,8 @@ import {
   Star,
   Tag,
   Trash2,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 export default function CollectionsView({
@@ -31,6 +33,8 @@ export default function CollectionsView({
   onRequestDeleteThought,
   onAddThought,
   onCopyThought,
+  onListenThought,
+  activeSpeakingThoughtId,
 }) {
   const [copiedId, setCopiedId] = useState(null);
   const normalizedQuery = collectionSearchQuery.trim().toLowerCase();
@@ -78,6 +82,7 @@ export default function CollectionsView({
 
   const renderThoughtCard = (thought) => {
     const cardColorClass = `card-color-${thought.cardColor || 'default'}`;
+    const isSpeakingThis = activeSpeakingThoughtId === thought.id;
 
     return (
       <div
@@ -97,6 +102,21 @@ export default function CollectionsView({
             <CalendarDays size={13} /> {formatDate(thought.entryDate || thought.createdAt || thought.timestamp)}
           </span>
           <div className="card-quick-actions">
+            {/* Quick Listen in Spiritual Voice */}
+            <button
+              type="button"
+              className={`card-quick-btn listen-btn ${isSpeakingThis ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onListenThought) onListenThought(thought);
+              }}
+              title={isSpeakingThis ? 'Stop listening' : 'Listen in spiritual voice'}
+              aria-label="Listen to thought"
+            >
+              {isSpeakingThis ? <VolumeX size={14} /> : <Volume2 size={14} />}
+            </button>
+
+            {/* Quick Copy */}
             <button
               type="button"
               className={`card-quick-btn copy-btn ${copiedId === thought.id ? 'active' : ''}`}
@@ -106,6 +126,8 @@ export default function CollectionsView({
             >
               {copiedId === thought.id ? <Check size={14} className="copied-check" /> : <Copy size={14} />}
             </button>
+
+            {/* Favorite */}
             <button
               type="button"
               className={`card-quick-btn fav-btn ${thought.favorite ? 'active' : ''}`}
@@ -118,6 +140,8 @@ export default function CollectionsView({
             >
               <Star size={15} className={thought.favorite ? 'filled' : ''} />
             </button>
+
+            {/* Delete */}
             <button
               type="button"
               className="card-quick-btn del-btn"

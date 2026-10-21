@@ -6,6 +6,10 @@ import { GoogleDriveService } from './googleDrive';
 import CollectionsView from './CollectionsView';
 import SettingsView from './SettingsView';
 import ConfirmModal from './ConfirmModal';
+import VoicePanel from './VoicePanel';
+import { useTTS } from './useTTS';
+import { containsUrdu } from './useVoice';
+import { useTranslate } from './useTranslate';
 import './App.css';
 import {
   AlignCenter,
@@ -19,24 +23,31 @@ import {
   ClipboardPaste,
   CloudLightning,
   Copy,
+  Download,
   FilePlus2,
   Heart,
   Italic,
+  Languages,
   List,
   LogOut,
   Moon,
   Palette,
+  Pause,
   Pencil,
+  Play,
   Quote,
   RotateCw,
   Save,
   Settings,
   Sparkles,
+  Square,
   Star,
   Sun,
   Tag,
   Trash2,
   Type,
+  Volume2,
+  VolumeX,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -295,6 +306,31 @@ export default function App() {
   const [editFormData, setEditFormData] = useState(() => makeBlankForm(DEFAULT_CATEGORIES));
   const [copiedThought, setCopiedThought] = useState(false);
   const [pasteToast, setPasteToast] = useState(null);
+
+  // ── Voice & Audio state ──
+  const [voiceLang, setVoiceLang] = useState('en-US');
+  const [showTTSPlayer, setShowTTSPlayer] = useState(false);
+  const [ttsRate, setTtsRate] = useState(0.85);
+  const [ttsLang, setTtsLang] = useState('en-US');
+  const [activeSpeakingThoughtId, setActiveSpeakingThoughtId] = useState(null);
+  const [showTranslated, setShowTranslated] = useState(false);
+  const [translatedThought, setTranslatedThought] = useState(null);
+  const [isExportingAudio, setIsExportingAudio] = useState(false);
+  const [isTranslatingThought, setIsTranslatingThought] = useState(false);
+
+  const { speak, stop: ttsStop, pause: ttsPause, resume: ttsResume, isSpeaking, isPaused, exportAudio } = useTTS();
+  const { translate } = useTranslate();
+
+  const closeSelectedThought = useCallback(() => {
+    setSelectedThought(null);
+    setIsEditingThought(false);
+    setCopiedThought(false);
+    ttsStop();
+    setShowTTSPlayer(false);
+    setShowTranslated(false);
+    setTranslatedThought(null);
+    setActiveSpeakingThoughtId(null);
+  }, [ttsStop]);
 
   const showPasteToast = (msg) => {
     setPasteToast(msg);
@@ -634,7 +670,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedThought]);
+  }, [selectedThought, closeSelectedThought]);
 
   useEffect(() => {
     if (!selectedThought) {
@@ -997,10 +1033,105 @@ export default function App() {
     }
   };
 
-  const closeSelectedThought = () => {
-    setSelectedThought(null);
-    setIsEditingThought(false);
-    setCopiedThought(false);
+  const handleQuickListenThought = (thought) => {
+    if (isSpeaking && activeSpeakingThoughtId === thought.id) {
+      ttsStop();
+      setActiveSpeakingThoughtId(null);
+      return;
+    }
+    const fullText = `${thought.subject ? thought.subject + '. ' : ''}${thought.description || ''}`.trim();
+    if (!fullText) return;
+    const lang = containsUrdu(fullText) ? 'ur-PK' : 'en-US';
+    setActiveSpeakingThoughtId(thought.id);
+    speak(fullText, {
+      lang,
+      rate: 0.82,
+      pitch: 0.68,
+      onEnd: () => setActiveSpeakingThoughtId(null),
+    });
+  };
+
+  const handleToggleTTSPlayer = () => {
+    if (showTTSPlayer && isSpeaking) {
+      ttsStop();
+      setActiveSpeakingThoughtId(null);
+    }
+    setShowTTSPlayer((prev) => !prev);
+  };
+
+  const handlePlayPauseTTS = () => {
+    if (!selectedThought) return;
+    if (isSpeaking && !isPaused) {
+      ttsPause();
+      return;
+    }
+    if (isPaused) {
+      ttsResume();
+      return;
+    }
+    const fullText = `${selectedThought.subject ? selectedThought.subject + '. ' : ''}${selectedThought.description || ''}`.trim();
+    if (!fullText) return;
+    const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
+    speak(fullText, {
+      lang: detectedLang,
+      rate: ttsRate,
+      pitch: 0.68,
+      onEnd: () => setActiveSpeakingThoughtId(null),
+    });
+    setActiveSpeakingThoughtId(selectedThought.id);
+  };
+
+  const handleStopTTS = () => {
+    ttsStop();
+    setActiveSpeakingThoughtId(null);
+  };
+
+  const handleExportSelectedAudio = async () => {
+    if (!selectedThought) return;
+    const fullText = `${selectedThought.subject ? selectedThought.subject + '. ' : ''}${selectedThought.description || ''}`.trim();
+    if (!fullText) return;
+    setIsExportingAudio(true);
+    const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
+    const filename = `${(selectedThought.subject || 'spiritual-thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
+    await exportAudio(fullText, { lang: detectedLang, filename });
+    setIsExportingAudio(false);
+    showPasteToast('Spiritual voice audio (.wav) exported!');
+  };
+
+  const handleToggleTranslateSelected = async () => {
+    if (showTranslated) {
+      setShowTranslated(false);
+      return;
+    }
+    if (translatedThought && translatedThought.id === selectedThought?.id) {
+      setShowTranslated(true);
+      return;
+    }
+    if (!selectedThought) return;
+    setIsTranslatingThought(true);
+    const isUr = containsUrdu(selectedThought.description || selectedThought.subject || '');
+    const sourceLang = isUr ? 'ur' : 'en';
+    const targetLang = isUr ? 'en' : 'ur';
+
+    try {
+      const translatedSubj = selectedThought.subject
+        ? await translate(selectedThought.subject, sourceLang, targetLang)
+        : '';
+      const translatedDesc = selectedThought.description
+        ? await translate(selectedThought.description, sourceLang, targetLang)
+        : '';
+      setTranslatedThought({
+        id: selectedThought.id,
+        targetLang,
+        subject: translatedSubj,
+        description: translatedDesc,
+      });
+      setShowTranslated(true);
+    } catch {
+      showPasteToast('Translation failed');
+    } finally {
+      setIsTranslatingThought(false);
+    }
   };
 
   const favoriteCount = thoughts.filter((thought) => thought.favorite).length;
@@ -1117,6 +1248,8 @@ export default function App() {
             onRequestDeleteThought={requestDeleteThought}
             onAddThought={() => setActiveView('add')}
             onCopyThought={handleCopyThought}
+            onListenThought={handleQuickListenThought}
+            activeSpeakingThoughtId={activeSpeakingThoughtId}
           />
         )}
 
@@ -1142,6 +1275,139 @@ export default function App() {
                     }
                   }}
                 >
+                  {/* Practical Composer Quick Bar */}
+                  <div className="composer-quick-bar">
+                    <button
+                      type="button"
+                      className="composer-pill-btn"
+                      onClick={() => handlePasteToDescription(false)}
+                      title="Paste clipboard text into description"
+                    >
+                      <ClipboardPaste size={14} /> Paste Text
+                    </button>
+
+                    <button
+                      type="button"
+                      className="composer-pill-btn"
+                      onClick={() => {
+                        const draftText = `${formData.subject ? formData.subject + '\n\n' : ''}${formData.description || ''}`.trim();
+                        if (!draftText) {
+                          showPasteToast('Draft is empty');
+                          return;
+                        }
+                        navigator.clipboard.writeText(draftText);
+                        showPasteToast('Draft copied to clipboard!');
+                      }}
+                      title="Copy current draft"
+                    >
+                      <Copy size={14} /> Copy Draft
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`composer-pill-btn ${isSpeaking && activeSpeakingThoughtId === 'draft' ? 'active' : ''}`}
+                      onClick={() => {
+                        if (isSpeaking && activeSpeakingThoughtId === 'draft') {
+                          ttsStop();
+                          setActiveSpeakingThoughtId(null);
+                          return;
+                        }
+                        const draftText = `${formData.subject ? formData.subject + '. ' : ''}${formData.description || ''}`.trim();
+                        if (!draftText) {
+                          showPasteToast('Nothing to listen to');
+                          return;
+                        }
+                        const isUr = containsUrdu(draftText);
+                        setActiveSpeakingThoughtId('draft');
+                        speak(draftText, {
+                          lang: isUr ? 'ur-PK' : voiceLang,
+                          rate: 0.82,
+                          pitch: 0.68,
+                          onEnd: () => setActiveSpeakingThoughtId(null),
+                        });
+                      }}
+                      title="Listen to draft in deep spiritual male voice"
+                    >
+                      {isSpeaking && activeSpeakingThoughtId === 'draft' ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                      {isSpeaking && activeSpeakingThoughtId === 'draft' ? 'Stop Voice' : 'Listen Voice'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="composer-pill-btn"
+                      disabled={isExportingAudio}
+                      onClick={async () => {
+                        const draftText = `${formData.subject ? formData.subject + '. ' : ''}${formData.description || ''}`.trim();
+                        if (!draftText) {
+                          showPasteToast('Add some text to export audio');
+                          return;
+                        }
+                        setIsExportingAudio(true);
+                        const isUr = containsUrdu(draftText);
+                        const filename = `${(formData.subject || 'thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
+                        await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename });
+                        setIsExportingAudio(false);
+                        showPasteToast('Spiritual voice audio (.wav) exported!');
+                      }}
+                      title="Export spiritual voice audio (.wav)"
+                    >
+                      <Download size={14} /> {isExportingAudio ? 'Exporting...' : 'Export Audio (.wav)'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="composer-pill-btn"
+                      disabled={isTranslatingThought}
+                      onClick={async () => {
+                        const textToTrans = (formData.description || formData.subject || '').trim();
+                        if (!textToTrans) {
+                          showPasteToast('Add some text to translate');
+                          return;
+                        }
+                        setIsTranslatingThought(true);
+                        const isUr = containsUrdu(textToTrans);
+                        const sLang = isUr ? 'ur' : 'en';
+                        const tLang = isUr ? 'en' : 'ur';
+                        try {
+                          const transSubj = formData.subject ? await translate(formData.subject, sLang, tLang) : '';
+                          const transDesc = formData.description ? await translate(formData.description, sLang, tLang) : '';
+                          setFormData((c) => ({
+                            ...c,
+                            subject: transSubj || c.subject,
+                            description: transDesc || c.description,
+                          }));
+                          showPasteToast(`Translated to ${tLang === 'ur' ? 'Urdu' : 'English'}`);
+                        } catch {
+                          showPasteToast('Translation failed');
+                        } finally {
+                          setIsTranslatingThought(false);
+                        }
+                      }}
+                      title="Translate draft between Urdu & English"
+                    >
+                      <Languages size={14} /> {isTranslatingThought ? 'Translating...' : 'Translate Draft'}
+                    </button>
+                  </div>
+
+                  {/* Voice Input Panel */}
+                  <VoicePanel
+                    lang={voiceLang}
+                    setLang={setVoiceLang}
+                    onTranscript={(text) => {
+                      setFormData((c) => ({
+                        ...c,
+                        description: c.description ? c.description + ' ' + text : text,
+                      }));
+                    }}
+                    onDraftComplete={({ subject, description }) => {
+                      setFormData((c) => ({
+                        ...c,
+                        subject: subject || c.subject,
+                        description: description || c.description,
+                      }));
+                    }}
+                  />
+
                   <div className="field">
                     <div className="field-label-row">
                       <span>Subject</span>
@@ -1514,6 +1780,41 @@ export default function App() {
                       {copiedThought ? <Check size={17} /> : <Copy size={17} />}
                     </button>
 
+                    {/* Listen in Spiritual Voice */}
+                    <button
+                      type="button"
+                      className={`icon-button tts-listen-btn ${showTTSPlayer ? 'active' : ''} ${isSpeaking && activeSpeakingThoughtId === selectedThought.id ? 'active-speaking' : ''}`}
+                      onClick={handleToggleTTSPlayer}
+                      aria-label="Listen in spiritual voice"
+                      title={showTTSPlayer ? 'Hide spiritual player' : 'Listen in spiritual voice'}
+                    >
+                      {isSpeaking && activeSpeakingThoughtId === selectedThought.id ? <VolumeX size={17} /> : <Volume2 size={17} />}
+                    </button>
+
+                    {/* Export Audio (.wav) */}
+                    <button
+                      type="button"
+                      className={`icon-button tts-export-btn ${isExportingAudio ? 'exporting' : ''}`}
+                      onClick={handleExportSelectedAudio}
+                      disabled={isExportingAudio}
+                      aria-label="Export spiritual audio (.wav)"
+                      title="Export audio (.wav) in heavy spiritual male voice"
+                    >
+                      <Download size={17} />
+                    </button>
+
+                    {/* Translate Thought */}
+                    <button
+                      type="button"
+                      className={`icon-button translate-btn ${showTranslated ? 'active' : ''}`}
+                      onClick={handleToggleTranslateSelected}
+                      disabled={isTranslatingThought}
+                      aria-label="Translate thought"
+                      title={isTranslatingThought ? 'Translating...' : showTranslated ? 'Hide translation' : 'Translate thought'}
+                    >
+                      <Languages size={17} />
+                    </button>
+
                     <button
                       type="button"
                       className="icon-button"
@@ -1554,6 +1855,115 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* Spiritual Voice Player Drawer */}
+            {showTTSPlayer && !isEditingThought && (
+              <div className="spiritual-voice-player">
+                <div className="player-top-row">
+                  <div className="voice-identity">
+                    <span className="voice-badge">🎙 Spiritual Deep Voice</span>
+                    <span className="voice-speed-indicator">{ttsRate}x · Male Resonance</span>
+                  </div>
+
+                  <div className="player-controls">
+                    <button
+                      type="button"
+                      className="player-btn primary-play"
+                      onClick={handlePlayPauseTTS}
+                      title={isSpeaking && !isPaused ? 'Pause' : 'Play'}
+                    >
+                      {isSpeaking && !isPaused ? <Pause size={14} /> : <Play size={14} />}
+                      {isSpeaking && !isPaused ? 'Pause' : isPaused ? 'Resume' : 'Play'}
+                    </button>
+
+                    {isSpeaking && (
+                      <button
+                        type="button"
+                        className="player-btn"
+                        onClick={handleStopTTS}
+                        title="Stop playback"
+                      >
+                        <Square size={14} /> Stop
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="player-btn export-btn"
+                      onClick={handleExportSelectedAudio}
+                      disabled={isExportingAudio}
+                      title="Export audio as WAV"
+                    >
+                      <Download size={14} /> {isExportingAudio ? 'Exporting...' : 'Export .wav'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="player-bottom-row">
+                  <div className={`audio-soundwave ${isSpeaking && !isPaused ? 'playing' : ''}`}>
+                    <span className="wave-bar bar-1" />
+                    <span className="wave-bar bar-2" />
+                    <span className="wave-bar bar-3" />
+                    <span className="wave-bar bar-4" />
+                    <span className="wave-bar bar-5" />
+                  </div>
+
+                  <div className="speed-pills">
+                    <span className="speed-label">Lang:</span>
+                    <button
+                      type="button"
+                      className={`speed-pill ${ttsLang === 'en-US' ? 'active' : ''}`}
+                      onClick={() => setTtsLang('en-US')}
+                    >
+                      EN
+                    </button>
+                    <button
+                      type="button"
+                      className={`speed-pill ${ttsLang === 'ur-PK' ? 'active' : ''}`}
+                      onClick={() => setTtsLang('ur-PK')}
+                    >
+                      اردو
+                    </button>
+                    <span className="speed-label" style={{ marginLeft: 6 }}>Speed:</span>
+                    {[0.75, 0.85, 1.0, 1.25].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        className={`speed-pill ${ttsRate === rate ? 'active' : ''}`}
+                        onClick={() => setTtsRate(rate)}
+                      >
+                        {rate}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Translation View Block */}
+            {showTranslated && !isEditingThought && translatedThought && translatedThought.id === selectedThought.id && (
+              <div className="preview-translation-block" dir="auto">
+                <div className="translation-block-header">
+                  <span className="badge-translated">
+                    <Languages size={14} /> Translated ({translatedThought.targetLang === 'ur' ? 'اردو Urdu' : 'English'})
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => setShowTranslated(false)}
+                    title="Close translation"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                {translatedThought.subject && (
+                  <h4 className="translation-title">{translatedThought.subject}</h4>
+                )}
+                <div className="translation-body">
+                  {renderFormattedContent(translatedThought.description)}
+                </div>
+              </div>
+            )}
 
             {isEditingThought ? (
               <form
