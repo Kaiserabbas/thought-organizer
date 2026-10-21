@@ -1,5 +1,5 @@
 // useVoice.js — Bilingual voice recognition: auto-detects Urdu & English
-// Native Web Speech API — free, no backend, works on desktop and mobile browsers.
+// Native Web Speech API — free, zero audio conflicts, loop-proof dictation.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transliterateRomanUrduOffline, isLikelyRomanUrdu } from './urduTransliterator';
@@ -50,7 +50,7 @@ export function formatEnglishSentence(text) {
  * - 'ur-PK' → outputs native Urdu Unicode script (not Roman transliteration)
  * - 'en-US' → outputs English text with capitalized first words
  * - Auto-detects language from recognized text and switches automatically
- * - Mobile-optimized: handles browser audio focus and auto-restarts smoothly
+ * - Loop-proof: immune to rapid on/off restarts, mic collisions, or unmount leaks
  * - Deduplicates chunks so text never repeats
  *
  * @param {Object}   options
@@ -65,28 +65,43 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
   const [currentLang,       setCurrentLang]       = useState(lang);
   const [error,             setError]             = useState(null);
 
-  const recognitionRef   = useRef(null);
-  const shouldRestartRef = useRef(false);
-  const restartTimerRef  = useRef(null);
-  const onNewChunkRef    = useRef(onNewChunk);
-  const onCommandRef     = useRef(onCommand);
-  const seenChunksRef    = useRef(new Set()); // dedup — prevent repeated text
+  const recognitionRef       = useRef(null);
+  const shouldRestartRef     = useRef(false);
+  const restartTimerRef      = useRef(null);
+  const consecutiveErrorsRef = useRef(0);
+  const currentLangRef       = useRef(lang);
+  const onNewChunkRef        = useRef(onNewChunk);
+  const onCommandRef         = useRef(onCommand);
+  const seenChunksRef        = useRef(new Set()); // dedup — prevent repeated text
 
   onNewChunkRef.current = onNewChunk;
   onCommandRef.current  = onCommand;
 
-  useEffect(() => { setCurrentLang(lang); }, [lang]);
+  useEffect(() => {
+    setCurrentLang(lang);
+    currentLangRef.current = lang;
+  }, [lang]);
 
   const stopListening = useCallback(() => {
     shouldRestartRef.current = false;
+    consecutiveErrorsRef.current = 0;
+
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
     }
+
     if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch { /* ignore */ }
+      const oldRec = recognitionRef.current;
       recognitionRef.current = null;
+      // Strip listeners first so abort() does NOT fire onend and trigger restart
+      oldRec.onend = null;
+      oldRec.onerror = null;
+      oldRec.onresult = null;
+      oldRec.onstart = null;
+      try { oldRec.abort(); } catch { /* ignore */ }
     }
+
     setIsListening(false);
     setInterimTranscript('');
   }, []);
@@ -111,13 +126,24 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
     setError(null);
 
-    // Abort any prior instance
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch { /* ignore */ }
-      recognitionRef.current = null;
+    // Cancel any pending restart timers
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
     }
 
-    const useLang = forceLang || currentLang;
+    // Cleanly unbind and abort any previous recognition instance
+    if (recognitionRef.current) {
+      const oldRec = recognitionRef.current;
+      recognitionRef.current = null;
+      oldRec.onend = null;
+      oldRec.onerror = null;
+      oldRec.onresult = null;
+      oldRec.onstart = null;
+      try { oldRec.abort(); } catch { /* ignore */ }
+    }
+
+    const useLang = forceLang || currentLangRef.current || 'ur-PK';
     let recognition;
     try {
       recognition = new SpeechRecognitionAPI();
@@ -126,7 +152,6 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
       return;
     }
 
-    // continuous=true keeps it alive; interim gives live preview as you speak
     recognition.continuous     = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -135,12 +160,13 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     recognition.onstart = () => {
       setIsListening(true);
       setError(null);
+      consecutiveErrorsRef.current = 0;
     };
 
     recognition.onresult = (event) => {
+      consecutiveErrorsRef.current = 0;
       let interimText = '';
 
-      // Only process new results from resultIndex — avoids re-processing old results
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const rawText = result[0].transcript;
@@ -159,7 +185,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
 
           // Convert to Urdu script if in Urdu mode or if text is recognized as Roman Urdu
           let processedChunk = chunk;
-          const isUrduMode = useLang === 'ur-PK' || currentLang === 'ur-PK';
+          const isUrduMode = useLang === 'ur-PK' || currentLangRef.current === 'ur-PK';
           if (isUrduMode || isLikelyRomanUrdu(chunk)) {
             processedChunk = transliterateRomanUrduOffline(chunk);
           }
@@ -172,6 +198,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
           const isUrdu = isUrduMode || containsUrdu(processedChunk);
           if (isUrdu && useLang !== 'ur-PK') {
             setCurrentLang('ur-PK');
+            currentLangRef.current = 'ur-PK';
           }
 
           // Format English capitalization if English
@@ -211,7 +238,7 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
       }
 
       if (interimText) {
-        const isUrduMode = useLang === 'ur-PK' || currentLang === 'ur-PK';
+        const isUrduMode = useLang === 'ur-PK' || currentLangRef.current === 'ur-PK';
         const displayInterim = isUrduMode ? transliterateRomanUrduOffline(interimText) : interimText;
         setInterimTranscript(isUrduMode ? displayInterim : formatEnglishSentence(displayInterim));
       } else {
@@ -220,45 +247,68 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     };
 
     recognition.onerror = (event) => {
+      // Abort is a normal event when user stops listening or resets
+      if (event.error === 'aborted') {
+        return;
+      }
+
       if (event.error === 'not-allowed' || event.error === 'permission-denied') {
         setError('Microphone access denied. Please allow microphone permission in browser settings.');
         shouldRestartRef.current = false;
         setIsListening(false);
-      } else if (event.error === 'network') {
-        // Transient network error on mobile
-        setError('Network error with voice engine. Retrying connection...');
-      } else if (event.error === 'no-speech') {
-        // Natural pause / silence — not a fatal error
-        setInterimTranscript('');
-      } else if (event.error === 'audio-capture') {
+        return;
+      }
+
+      if (event.error === 'audio-capture') {
         setError('Microphone unavailable or in use by another app.');
         shouldRestartRef.current = false;
         setIsListening(false);
-      } else if (event.error !== 'aborted') {
-        setError(`Voice recognition error: ${event.error}`);
+        return;
+      }
+
+      // Track consecutive errors to prevent rapid infinite restart loops
+      consecutiveErrorsRef.current += 1;
+      if (consecutiveErrorsRef.current >= 2) {
+        shouldRestartRef.current = false;
+        setIsListening(false);
+        setError('Microphone disconnected or interrupted. Tap mic to restart.');
+        return;
+      }
+
+      if (event.error === 'network') {
+        setError('Voice connection interrupted.');
+      } else if (event.error === 'no-speech') {
+        setInterimTranscript('');
+      } else {
+        setError(`Voice error: ${event.error}`);
       }
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      setInterimTranscript('');
+      // If this instance is not the currently active one, ignore completely
+      if (recognitionRef.current !== recognition) {
+        return;
+      }
 
-      // Auto-restart after pause — this enables continuous dictation on both desktop and mobile
+      recognitionRef.current = null;
+
+      // Only restart if the user intentionally has listening turned on and no fatal error occurred
       if (shouldRestartRef.current) {
-        if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch { /* ignore */ }
-          recognitionRef.current = null;
-        }
-
         if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+        // Safe 600ms cooldown prevents rapid mic on/off cycling
         restartTimerRef.current = setTimeout(() => {
           if (!shouldRestartRef.current) return;
           try {
             startListening(useLang);
           } catch (e) {
             console.warn('Auto-restart recognition error:', e);
+            shouldRestartRef.current = false;
+            setIsListening(false);
           }
-        }, 150);
+        }, 600);
+      } else {
+        setIsListening(false);
+        setInterimTranscript('');
       }
     };
 
@@ -270,14 +320,21 @@ export function useVoice({ lang = 'ur-PK', onNewChunk, onCommand } = {}) {
     } catch (err) {
       setError(`Microphone error: ${err.message}`);
       shouldRestartRef.current = false;
+      setIsListening(false);
     }
-  }, [currentLang, stopListening]);
+  }, [stopListening]);
 
   useEffect(() => () => {
     shouldRestartRef.current = false;
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch { /* ignore */ }
+      const oldRec = recognitionRef.current;
+      recognitionRef.current = null;
+      oldRec.onend = null;
+      oldRec.onerror = null;
+      oldRec.onresult = null;
+      oldRec.onstart = null;
+      try { oldRec.abort(); } catch { /* ignore */ }
     }
   }, []);
 

@@ -1,19 +1,10 @@
 // VoicePanel.jsx — Bilingual Voice Input (Urdu in Urdu script / English in English)
-// Native Web Speech API — works on mobile & desktop browsers. Zero paid APIs required.
+// Native Web Speech API — works on mobile & desktop browsers. Zero audio collisions.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Copy, Download, Mic, MicOff, Volume2, X, Zap, Loader2 } from 'lucide-react';
 import { useVoice, containsUrdu, formatEnglishSentence } from './useVoice';
 import { useTTS } from './useTTS';
-
-/** Detect if running on mobile device to avoid microphone collision */
-const isMobileDevice = () => {
-  if (typeof navigator === 'undefined') return false;
-  return (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1)
-  );
-};
 
 /**
  * VoicePanel
@@ -38,9 +29,6 @@ export default function VoicePanel({
 
   const canvasRef    = useRef(null);
   const animFrameRef = useRef(null);
-  const analyserRef  = useRef(null);
-  const audioCtxRef  = useRef(null);
-  const micStreamRef = useRef(null);
 
   const { speak, isSpeaking, isLoadingAudio, exportAudio, isExporting } = useTTS();
 
@@ -82,125 +70,69 @@ export default function VoicePanel({
     }
   }, [currentLang, lang, setLang]);
 
-  // ── Waveform Visualizer ────────────────────────────────────────────
-  // On mobile devices, acquiring getUserMedia steals mic focus from SpeechRecognition,
-  // causing mobile SpeechRecognition to abort immediately.
-  // We use live analyser on desktop, and smooth animated synthetic wave on mobile.
-  const startWaveform = useCallback(async () => {
+  // ── Waveform Visualizer (Synthetic Animation — Zero Mic Contention) ──
+  const startWaveform = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const { width, height } = canvas;
 
-    // Mobile fallback: synthetic wave animation (no microphone collision)
-    if (isMobileDevice()) {
-      let step = 0;
-      const drawSynthetic = () => {
-        animFrameRef.current = requestAnimationFrame(drawSynthetic);
-        step += 0.08;
-        ctx.clearRect(0, 0, width, height);
-        const bars = 24;
-        const bw = width / bars;
-        for (let i = 0; i < bars; i++) {
-          const wave = Math.sin(step + i * 0.4) * 0.5 + 0.5;
-          const bh = Math.max(4, wave * (height - 6));
-          ctx.fillStyle = '#125d01';
-          ctx.globalAlpha = 0.4 + wave * 0.6;
-          ctx.beginPath();
-          if (ctx.roundRect) {
-            ctx.roundRect(i * bw + 2, height - bh, bw - 4, bh, 2);
-          } else {
-            ctx.rect(i * bw + 2, height - bh, bw - 4, bh);
-          }
-          ctx.fill();
+    let step = 0;
+    const draw = () => {
+      animFrameRef.current = requestAnimationFrame(draw);
+      step += 0.08;
+      ctx.clearRect(0, 0, width, height);
+      const bars = 26;
+      const bw = width / bars;
+      for (let i = 0; i < bars; i++) {
+        const wave = Math.sin(step + i * 0.35) * 0.5 + 0.5;
+        const wave2 = Math.cos(step * 0.7 + i * 0.5) * 0.3 + 0.3;
+        const combined = Math.min(1, wave * 0.7 + wave2 * 0.3);
+        const bh = Math.max(4, combined * (height - 6));
+        ctx.fillStyle = '#125d01';
+        ctx.globalAlpha = 0.35 + combined * 0.65;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(i * bw + 2, height - bh, bw - 4, bh, 2);
+        } else {
+          ctx.rect(i * bw + 2, height - bh, bw - 4, bh);
         }
-        ctx.globalAlpha = 1;
-      };
-      drawSynthetic();
-      return;
-    }
-
-    // Desktop: live audio analyser
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      micStreamRef.current = stream;
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const audioCtx = new AudioCtx();
-      audioCtxRef.current = audioCtx;
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
-      analyserRef.current = analyser;
-      audioCtx.createMediaStreamSource(stream).connect(analyser);
-
-      const bufLen = analyser.frequencyBinCount;
-      const data   = new Uint8Array(bufLen);
-
-      const draw = () => {
-        animFrameRef.current = requestAnimationFrame(draw);
-        analyser.getByteFrequencyData(data);
-        ctx.clearRect(0, 0, width, height);
-        const bw = (width / bufLen) * 2.2;
-        let x = 0;
-        for (let i = 0; i < bufLen; i++) {
-          const bh    = Math.max(3, (data[i] / 255) * height);
-          const alpha = 0.4 + (data[i] / 255) * 0.6;
-          ctx.fillStyle   = '#125d01';
-          ctx.globalAlpha = alpha;
-          ctx.beginPath();
-          if (ctx.roundRect) {
-            ctx.roundRect(x, height - bh, bw - 2, bh, 2);
-          } else {
-            ctx.rect(x, height - bh, bw - 2, bh);
-          }
-          ctx.fill();
-          x += bw + 1;
-        }
-        ctx.globalAlpha = 1;
-      };
-      draw();
-    } catch {
-      // If mic access fails or permission denied, fallback to synthetic animation
-      let step = 0;
-      const drawSynthetic = () => {
-        animFrameRef.current = requestAnimationFrame(drawSynthetic);
-        step += 0.08;
-        ctx.clearRect(0, 0, width, height);
-        const bars = 24;
-        const bw = width / bars;
-        for (let i = 0; i < bars; i++) {
-          const wave = Math.sin(step + i * 0.4) * 0.5 + 0.5;
-          const bh = Math.max(4, wave * (height - 6));
-          ctx.fillStyle = '#125d01';
-          ctx.globalAlpha = 0.4 + wave * 0.6;
-          ctx.fillRect(i * bw + 2, height - bh, bw - 4, bh);
-        }
-        ctx.globalAlpha = 1;
-      };
-      drawSynthetic();
-    }
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+    draw();
   }, []);
 
   const stopWaveform = useCallback(() => {
-    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
-    if (micStreamRef.current) { micStreamRef.current.getTracks().forEach((t) => t.stop()); micStreamRef.current = null; }
-    if (audioCtxRef.current)  { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
-    analyserRef.current = null;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
     const canvas = canvasRef.current;
-    if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
   }, []);
 
-  const handleStartListening = useCallback(async () => {
+  // Sync waveform animation with listening state
+  useEffect(() => {
+    if (isListening) {
+      startWaveform();
+    } else {
+      stopWaveform();
+    }
+    return () => stopWaveform();
+  }, [isListening, startWaveform, stopWaveform]);
+
+  const handleStartListening = useCallback(() => {
     startRec();
-    await startWaveform();
-  }, [startRec, startWaveform]);
+  }, [startRec]);
 
   const handleStopListening = useCallback(() => {
     stopListening();
-    stopWaveform();
-  }, [stopListening, stopWaveform]);
-
-  useEffect(() => () => stopWaveform(), [stopWaveform]);
+  }, [stopListening]);
 
   // ── Auto-fill Draft ────────────────────────────────────────────────
   const handleDraftFill = () => {
