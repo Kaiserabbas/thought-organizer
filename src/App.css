@@ -3145,3 +3145,191 @@ h1 {
   font-style: italic;
   display: block;
 }
+
+
+/* ── Groq Whisper AI Styles ── */
+.voice-engine-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.voice-engine-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.engine-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.engine-pill:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.engine-pill.active {
+  background: #125d01;
+  color: #ffffff;
+  border-color: #125d01;
+  box-shadow: 0 2px 6px rgba(18, 93, 1, 0.25);
+}
+
+.engine-pill .pill-badge {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.25);
+  color: inherit;
+  font-weight: 700;
+}
+
+.voice-model-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.model-sub-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.model-sub-pill:hover {
+  border-color: #125d01;
+  color: var(--text-primary);
+}
+
+.model-sub-pill.active {
+  background: rgba(18, 93, 1, 0.12);
+  color: #125d01;
+  border-color: #125d01;
+  font-weight: 700;
+}
+
+.voice-upload-action {
+  margin-top: 6px;
+}
+
+.voice-upload-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.voice-upload-file-btn:hover:not(:disabled) {
+  border-color: #125d01;
+  color: #125d01;
+  background: rgba(18, 93, 1, 0.05);
+}
+
+.transcript-loading-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 0;
+}
+
+/* Groq Settings Card */
+.groq-settings-card {
+  border-left: 4px solid #125d01;
+}
+
+.groq-badge {
+  background: rgba(18, 93, 1, 0.12);
+  color: #125d01;
+}
+
+.groq-model-selector-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.groq-model-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.groq-model-pill {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.groq-model-pill:hover {
+  border-color: #125d01;
+}
+
+.groq-model-pill.active {
+  background: #125d01;
+  color: #ffffff;
+  border-color: #125d01;
+  box-shadow: 0 2px 8px rgba(18, 93, 1, 0.25);
+}
+
+.voice-live-badge.recording {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
+  animation: pulseRecording 1.4s infinite alternate;
+}
+
+.voice-live-badge.transcribing {
+  background: rgba(18, 93, 1, 0.15);
+  color: #125d01;
+  border-color: rgba(18, 93, 1, 0.3);
+}
+
+@keyframes pulseRecording {
+  from { opacity: 0.7; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1.02); }
+}

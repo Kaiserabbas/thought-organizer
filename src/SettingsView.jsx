@@ -21,8 +21,16 @@ import {
   Trash2,
   Upload,
   Volume2,
+  Zap,
 } from 'lucide-react';
 import { getGeminiApiKey, setGeminiApiKey, testGeminiApiKey } from './geminiService';
+import {
+  getGroqApiKey,
+  setGroqApiKey,
+  testGroqApiKey,
+  getGroqWhisperModel,
+  setGroqWhisperModel,
+} from './groqService';
 
 export default function SettingsView({
   theme,
@@ -58,8 +66,41 @@ export default function SettingsView({
   const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiApiKey());
   const [isGeminiTesting, setIsGeminiTesting] = useState(false);
   const [geminiStatusMsg, setGeminiStatusMsg] = useState({ text: '', type: '' });
+  const [groqKeyInput, setGroqKeyInput] = useState(() => getGroqApiKey());
+  const [groqModel, setGroqModel] = useState(() => getGroqWhisperModel());
+  const [isGroqTesting, setIsGroqTesting] = useState(false);
+  const [groqStatusMsg, setGroqStatusMsg] = useState({ text: '', type: '' });
   const [resetFeedback, setResetFeedback] = useState(false);
   const fileInputRef = useRef(null);
+
+  const handleSaveGroqKey = async (e) => {
+    if (e) e.preventDefault();
+    setGroqStatusMsg({ text: '', type: '' });
+    const cleanKey = groqKeyInput.trim();
+    if (!cleanKey) {
+      setGroqApiKey('');
+      setGroqStatusMsg({ text: 'Groq API key reset to default', type: 'info' });
+      return;
+    }
+    setIsGroqTesting(true);
+    try {
+      const result = await testGroqApiKey(cleanKey);
+      setGroqApiKey(cleanKey);
+      setGroqStatusMsg({
+        text: `Groq Whisper connected! (${result.models.filter((m) => m.includes('whisper')).join(', ') || 'Ready'})`,
+        type: 'success',
+      });
+    } catch (err) {
+      setGroqStatusMsg({ text: `Connection failed: ${err.message}`, type: 'error' });
+    } finally {
+      setIsGroqTesting(false);
+    }
+  };
+
+  const handleSelectGroqModel = (model) => {
+    setGroqModel(model);
+    setGroqWhisperModel(model);
+  };
 
   const handleResetDefaults = () => {
     if (setTtsRate) setTtsRate(0.85);
@@ -215,6 +256,90 @@ export default function SettingsView({
               <div className={`gemini-status-alert ${geminiStatusMsg.type}`}>
                 {geminiStatusMsg.type === 'success' && <Check size={14} />}
                 <span>{geminiStatusMsg.text}</span>
+              </div>
+            )}
+          </form>
+        </section>
+
+        {/* ── Groq Whisper AI Configuration ── */}
+        <section className="settings-card groq-settings-card">
+          <div className="card-section-heading">
+            <div className="settings-icon-badge groq-badge">
+              <Zap size={20} />
+            </div>
+            <div>
+              <h3>Groq Whisper AI (Urdu Voice-to-Urdu Text)</h3>
+              <p className="card-subtitle">
+                Powers real-time Urdu speech-to-text directly in Persian-Arabic / Nastaʿlīq script &amp; bilingual code-switching with OpenAI Whisper models on Groq LPUs
+              </p>
+            </div>
+          </div>
+
+          <div className="sync-status-row">
+            <span className="status-label">Groq Whisper Status:</span>
+            <span className={`status-pill ${groqKeyInput.trim() ? 'connected' : ''}`}>
+              {groqKeyInput.trim() ? `🟢 Active (${groqModel})` : '⚪ Not Configured'}
+            </span>
+          </div>
+
+          {/* Model selection */}
+          <div className="groq-model-selector-row">
+            <span className="field-label">Whisper Model:</span>
+            <div className="groq-model-pills" role="radiogroup">
+              <button
+                type="button"
+                className={`groq-model-pill ${groqModel === 'whisper-large-v3-turbo' ? 'active' : ''}`}
+                onClick={() => handleSelectGroqModel('whisper-large-v3-turbo')}
+              >
+                ⚡ whisper-large-v3-turbo (200ms Ultra-Fast)
+              </button>
+              <button
+                type="button"
+                className={`groq-model-pill ${groqModel === 'whisper-large-v3' ? 'active' : ''}`}
+                onClick={() => handleSelectGroqModel('whisper-large-v3')}
+              >
+                🎯 whisper-large-v3 (Maximum Nuance)
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveGroqKey} className="gemini-settings-form">
+            <label className="field">
+              <span className="field-label-row">
+                <span className="flex-inline"><Key size={14} /> Groq API Key</span>
+                <a
+                  href="https://console.groq.com/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ai-studio-link"
+                >
+                  Groq Console <ExternalLink size={12} />
+                </a>
+              </span>
+              <div className="gemini-input-group">
+                <input
+                  type="password"
+                  value={groqKeyInput}
+                  onChange={(e) => {
+                    setGroqKeyInput(e.target.value);
+                    setGroqStatusMsg({ text: '', type: '' });
+                  }}
+                  placeholder="Paste your Groq API key (gsk_...)"
+                />
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isGroqTesting}
+                >
+                  {isGroqTesting ? 'Testing...' : 'Save & Connect'}
+                </button>
+              </div>
+            </label>
+
+            {groqStatusMsg.text && (
+              <div className={`gemini-status-alert ${groqStatusMsg.type}`}>
+                {groqStatusMsg.type === 'success' && <Check size={14} />}
+                <span>{groqStatusMsg.text}</span>
               </div>
             )}
           </form>
