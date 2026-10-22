@@ -40,6 +40,20 @@ import {
   getGroqWhisperModel,
   setGroqWhisperModel,
 } from './groqService';
+import {
+  DEFAULT_AZURE_KEY,
+  DEFAULT_AZURE_KEY2,
+  AZURE_VOICE_OPTIONS,
+  getAzureSpeechKey,
+  setAzureSpeechKey,
+  getAzureSpeechRegion,
+  setAzureSpeechRegion,
+  getAzureUrduVoice,
+  setAzureUrduVoice,
+  getAzureEnglishVoice,
+  setAzureEnglishVoice,
+  testAzureSpeechConnection,
+} from './azureSpeechService';
 
 export default function SettingsView({
   theme,
@@ -94,6 +108,17 @@ export default function SettingsView({
   const [geminiSavedFeedback, setGeminiSavedFeedback] = useState(false);
   const [isGeminiTesting, setIsGeminiTesting] = useState(false);
   const [geminiStatusMsg, setGeminiStatusMsg] = useState({ text: '', type: '' });
+
+  // Microsoft Azure Speech
+  const [azureKeyInput, setAzureKeyInput] = useState(() => getAzureSpeechKey());
+  const [azureRegionInput, setAzureRegionInput] = useState(() => getAzureSpeechRegion());
+  const [azureUrduVoice, setAzureUrduVoiceState] = useState(() => getAzureUrduVoice());
+  const [azureEnVoice, setAzureEnVoiceState] = useState(() => getAzureEnglishVoice());
+  const [showAzureKey, setShowAzureKey] = useState(false);
+  const [azureCopied, setAzureCopied] = useState(false);
+  const [azureSavedFeedback, setAzureSavedFeedback] = useState(false);
+  const [isAzureTesting, setIsAzureTesting] = useState(false);
+  const [azureStatusMsg, setAzureStatusMsg] = useState({ text: '', type: '' });
 
   // Playback settings reset
   const [resetFeedback, setResetFeedback] = useState(false);
@@ -217,6 +242,81 @@ export default function SettingsView({
     } catch {
       // fallback
     }
+  };
+
+  // ── Azure Speech Handlers ──
+  const handleSaveAzureConfig = () => {
+    const cleanKey = azureKeyInput.trim();
+    setAzureSpeechKey(cleanKey);
+    setAzureSpeechRegion(azureRegionInput);
+    setAzureUrduVoice(azureUrduVoice);
+    setAzureEnglishVoice(azureEnVoice);
+    setAzureSavedFeedback(true);
+    setAzureStatusMsg({
+      text: cleanKey
+        ? `✓ Azure Speech settings permanently saved (${azureRegionInput} · ${azureUrduVoice}).`
+        : 'Azure Speech Key reset to default.',
+      type: 'success',
+    });
+    setTimeout(() => setAzureSavedFeedback(false), 2400);
+  };
+
+  const handleTestAzureConnection = async () => {
+    const cleanKey = azureKeyInput.trim();
+    if (!cleanKey) {
+      setAzureStatusMsg({ text: 'Please enter an Azure Speech Subscription Key to test.', type: 'error' });
+      return;
+    }
+    setIsAzureTesting(true);
+    setAzureStatusMsg({ text: `Testing connection to Azure Speech (${azureRegionInput})...`, type: 'info' });
+    try {
+      const res = await testAzureSpeechConnection(cleanKey, azureRegionInput);
+      setAzureSpeechKey(cleanKey);
+      setAzureSpeechRegion(azureRegionInput);
+      setAzureStatusMsg({
+        text: `✓ Connected to Azure ${azureRegionInput} in ${res.latency}ms! ${res.totalVoices} neural voices online (${res.urduVoices} Urdu voices).`,
+        type: 'success',
+      });
+    } catch (err) {
+      setAzureStatusMsg({ text: `Connection failed: ${err.message}`, type: 'error' });
+    } finally {
+      setIsAzureTesting(false);
+    }
+  };
+
+  const handleCopyAzureKey = async () => {
+    if (!azureKeyInput) return;
+    try {
+      await navigator.clipboard.writeText(azureKeyInput);
+      setAzureCopied(true);
+      setTimeout(() => setAzureCopied(false), 1600);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handlePasteAzureKey = async () => {
+    try {
+      const text = await navigator.clipboard?.readText();
+      if (text && text.trim()) {
+        setAzureKeyInput(text.trim());
+        setAzureStatusMsg({ text: '', type: '' });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleUseKey1 = () => {
+    setAzureKeyInput(DEFAULT_AZURE_KEY);
+    setAzureSpeechKey(DEFAULT_AZURE_KEY);
+    setAzureStatusMsg({ text: '✓ Switched to Azure Key 1 (Primary). Click Save to apply.', type: 'info' });
+  };
+
+  const handleUseKey2 = () => {
+    setAzureKeyInput(DEFAULT_AZURE_KEY2);
+    setAzureSpeechKey(DEFAULT_AZURE_KEY2);
+    setAzureStatusMsg({ text: '✓ Switched to Azure Key 2 (Secondary). Click Save to apply.', type: 'info' });
   };
 
   // ── Audio Settings Reset ──
@@ -647,6 +747,272 @@ export default function SettingsView({
           </section>
         )}
 
+        {/* ── Microsoft Azure Cognitive Speech (Neural Voice & STT) ── */}
+        {showAI && (
+          <section className="settings-card full-width azure-speech-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge azure-badge">
+                <Cloud size={22} />
+              </div>
+              <div className="heading-with-badge">
+                <div>
+                  <div className="card-title-row">
+                    <h3>Microsoft Azure Cognitive Speech Services</h3>
+                    <span className="groq-active-badge azure-active">
+                      🟢 Active ({azureRegionInput} · {azureUrduVoice})
+                    </span>
+                  </div>
+                  <p className="card-subtitle">
+                    Lifelike Neural Text-to-Speech (ur-PK-AsadNeural deep spiritual male voice) &amp; Speech-to-Text for Urdu and English.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Azure Resource Info Pill Bar */}
+            <div className="azure-resource-info-bar">
+              <div className="azure-meta-item">
+                <span className="meta-lbl">Resource:</span>
+                <strong className="meta-val">thought-organizer</strong>
+              </div>
+              <div className="azure-meta-item">
+                <span className="meta-lbl">Region:</span>
+                <strong className="meta-val">{azureRegionInput}</strong>
+              </div>
+              <div className="azure-meta-item">
+                <span className="meta-lbl">Pricing Tier:</span>
+                <strong className="meta-val">F0 (Free · 500k chars/mo)</strong>
+              </div>
+              <div className="azure-meta-item">
+                <span className="meta-lbl">Urdu Voice:</span>
+                <strong className="meta-val highlight">{azureUrduVoice}</strong>
+              </div>
+            </div>
+
+            {/* Key Quick Selection Buttons */}
+            <div className="azure-key-quick-row">
+              <span className="quick-row-label">Key Slot:</span>
+              <div className="azure-key-pills">
+                <button
+                  type="button"
+                  className={`azure-key-pill ${azureKeyInput === DEFAULT_AZURE_KEY ? 'active' : ''}`}
+                  onClick={handleUseKey1}
+                  title="Switch to Key 1 (Primary subscription key)"
+                >
+                  <Key size={13} />
+                  <span>Key 1 (Primary - Default)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`azure-key-pill ${azureKeyInput === DEFAULT_AZURE_KEY2 ? 'active' : ''}`}
+                  onClick={handleUseKey2}
+                  title="Switch to Key 2 (Secondary backup key)"
+                >
+                  <Key size={13} />
+                  <span>Key 2 (Secondary)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Azure API Key Input */}
+            <div className="api-key-box">
+              <div className="api-key-label-row">
+                <span className="flex-inline">
+                  <Key size={14} /> <strong>Azure Speech Subscription Key (Ocp-Apim-Subscription-Key)</strong>
+                </span>
+                <a
+                  href="https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/SpeechServices"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ai-studio-link"
+                >
+                  Azure Portal <ExternalLink size={12} />
+                </a>
+              </div>
+
+              <div className="api-key-input-wrapper">
+                <span className="key-icon-prefix">
+                  <Key size={15} />
+                </span>
+                <input
+                  type={showAzureKey ? 'text' : 'password'}
+                  value={azureKeyInput}
+                  onChange={(e) => {
+                    setAzureKeyInput(e.target.value);
+                    setAzureStatusMsg({ text: '', type: '' });
+                  }}
+                  placeholder="Paste Microsoft Azure Speech Subscription Key..."
+                  className="api-key-input"
+                  autoComplete="off"
+                  spellCheck="false"
+                />
+
+                <div className="api-key-inline-actions">
+                  <button
+                    type="button"
+                    className="key-action-icon-btn"
+                    onClick={() => setShowAzureKey((v) => !v)}
+                    title={showAzureKey ? 'Hide key' : 'Show key'}
+                  >
+                    {showAzureKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`key-action-icon-btn ${azureCopied ? 'copied' : ''}`}
+                    onClick={handleCopyAzureKey}
+                    title="Copy key to clipboard"
+                    disabled={!azureKeyInput}
+                  >
+                    {azureCopied ? <Check size={15} className="copied-check" /> : <Copy size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="key-action-icon-btn"
+                    onClick={handlePasteAzureKey}
+                    title="Paste from clipboard"
+                  >
+                    <ClipboardPaste size={15} />
+                  </button>
+
+                  {azureKeyInput && (
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={() => {
+                        setAzureKeyInput('');
+                        setAzureStatusMsg({ text: '', type: '' });
+                      }}
+                      title="Clear field"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Region and Voice Pickers */}
+              <div className="azure-settings-grid">
+                {/* Region */}
+                <div className="azure-config-field">
+                  <label htmlFor="azure-region-select" className="azure-field-label">
+                    Azure Service Region:
+                  </label>
+                  <select
+                    id="azure-region-select"
+                    value={azureRegionInput}
+                    onChange={(e) => {
+                      setAzureRegionInput(e.target.value);
+                      setAzureStatusMsg({ text: '', type: '' });
+                    }}
+                    className="azure-select"
+                  >
+                    <option value="eastus">eastus (US East · Configured Default)</option>
+                    <option value="eastus2">eastus2 (US East 2)</option>
+                    <option value="westeurope">westeurope (West Europe)</option>
+                    <option value="southeastasia">southeastasia (Southeast Asia)</option>
+                    <option value="centralus">centralus (Central US)</option>
+                    <option value="uksouth">uksouth (UK South)</option>
+                  </select>
+                </div>
+
+                {/* Urdu Voice */}
+                <div className="azure-config-field">
+                  <label htmlFor="azure-urdu-voice-select" className="azure-field-label">
+                    Urdu Neural Voice (STT &amp; TTS):
+                  </label>
+                  <select
+                    id="azure-urdu-voice-select"
+                    value={azureUrduVoice}
+                    onChange={(e) => {
+                      setAzureUrduVoiceState(e.target.value);
+                      setAzureStatusMsg({ text: '', type: '' });
+                    }}
+                    className="azure-select"
+                  >
+                    {AZURE_VOICE_OPTIONS.urdu.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.label} {v.id === 'ur-PK-AsadNeural' ? '⭐ Recommended' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* English Voice */}
+                <div className="azure-config-field">
+                  <label htmlFor="azure-en-voice-select" className="azure-field-label">
+                    English Neural Voice:
+                  </label>
+                  <select
+                    id="azure-en-voice-select"
+                    value={azureEnVoice}
+                    onChange={(e) => {
+                      setAzureEnVoiceState(e.target.value);
+                      setAzureStatusMsg({ text: '', type: '' });
+                    }}
+                    className="azure-select"
+                  >
+                    {AZURE_VOICE_OPTIONS.english.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.label} {v.id === 'en-US-GuyNeural' ? '⭐ Recommended' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="api-key-actions-row">
+                <div className="primary-actions-left">
+                  <button
+                    type="button"
+                    className="primary-button save-key-btn"
+                    onClick={handleSaveAzureConfig}
+                  >
+                    {azureSavedFeedback ? <Check size={15} /> : <Key size={15} />}
+                    <span>{azureSavedFeedback ? 'Azure Settings Saved!' : 'Save Azure Settings'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button test-key-btn"
+                    onClick={handleTestAzureConnection}
+                    disabled={isAzureTesting || !azureKeyInput.trim()}
+                  >
+                    {isAzureTesting ? <Loader2 size={15} className="spin-icon" /> : <Cloud size={15} />}
+                    <span>{isAzureTesting ? 'Testing connection...' : 'Test Connection'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      onTestSpeak?.('السلام علیکم، یہ مائیکروسافٹ ایژر کی قدرتی نیورل آواز ہے۔', 'ur-PK');
+                    }}
+                    disabled={isSpeaking}
+                    title="Test Urdu Neural Voice playback"
+                  >
+                    {isSpeaking ? <Loader2 size={15} className="spin-icon" /> : <Volume2 size={15} />}
+                    <span>Test Urdu Voice</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="api-security-note">
+                <span>🔒 Credentials stored securely in browser localStorage. Keys are obfuscated in memory.</span>
+              </div>
+
+              {azureStatusMsg.text && (
+                <div className={`gemini-status-alert ${azureStatusMsg.type}`}>
+                  {azureStatusMsg.type === 'success' && <Check size={14} />}
+                  <span>{azureStatusMsg.text}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* ── Audio Playback Speed & Pitch Settings ── */}
         {showAI && (
           <section className="settings-card full-width audio-settings-card">
@@ -657,7 +1023,7 @@ export default function SettingsView({
               <div>
                 <h3>Audio Playback &amp; Voice Controls</h3>
                 <p className="card-subtitle">
-                  Configure voice playback speed, voice pitch, and default voice engine (Existing is default)
+                  Configure voice playback speed, voice pitch, and default voice engine (Azure, Gemini, or Existing)
                 </p>
               </div>
             </div>
@@ -667,17 +1033,34 @@ export default function SettingsView({
               <div className="audio-setting-header">
                 <span className="audio-setting-title">Voice Engine:</span>
                 <span className="audio-setting-current-val">
-                  {voiceEngine === 'existing' ? 'Browser Web Speech (Default)' : 'Gemini Studio Spiritual Voice'}
+                  {voiceEngine === 'azure'
+                    ? 'Microsoft Azure Neural Voice (ur-PK-AsadNeural)'
+                    : voiceEngine === 'gemini'
+                    ? 'Gemini Studio Spiritual Voice'
+                    : 'Browser Web Speech (Default)'}
                 </span>
               </div>
               <div className="voice-engine-picker" role="radiogroup" aria-label="Default voice engine">
+                <button
+                  type="button"
+                  className={`voice-engine-btn ${voiceEngine === 'azure' ? 'active' : ''}`}
+                  onClick={() => setVoiceEngine && setVoiceEngine('azure')}
+                >
+                  <span className="engine-title">
+                    <Cloud size={16} /> Microsoft Azure Neural Voice (Recommended)
+                  </span>
+                  <span className="engine-desc">
+                    Authentic deep spiritual male voice (ur-PK-AsadNeural). Studio quality pronunciation for Urdu and English.
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   className={`voice-engine-btn ${voiceEngine === 'existing' ? 'active' : ''}`}
                   onClick={() => setVoiceEngine && setVoiceEngine('existing')}
                 >
                   <span className="engine-title">
-                    <Volume2 size={16} /> Existing Voice Engine (Default)
+                    <Volume2 size={16} /> Existing Voice Engine (Browser)
                   </span>
                   <span className="engine-desc">
                     Fast, offline-compatible browser voice tuned with deep baritone acoustics.

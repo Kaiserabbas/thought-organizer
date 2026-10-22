@@ -1,9 +1,10 @@
 // useTTS.js — Text-to-Speech + Audio Export Hook
-// Uses Gemini 3.8 Flash TTS for authentic spiritual male voice when API key is present.
-// Automatically falls back to browser-native Web Speech API + Web Audio API. 100% free.
+// Supports Microsoft Azure Neural Voice (ur-PK-AsadNeural deep spiritual voice),
+// Google Gemini 3.8 Flash TTS, and browser-native Web Speech API. 100% free offline fallback.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { generateSpiritualVoiceWav, triggerDownload } from './audioExporter';
+import { generateSpiritualVoiceAudio, triggerDownload } from './audioExporter';
+import { generateAzureNeuralSpeech, hasAzureSpeechKey } from './azureSpeechService';
 import { getOrGenerateSpiritualSpeech, hasGeminiApiKey } from './geminiService';
 import { containsUrdu } from './useVoice';
 
@@ -99,7 +100,7 @@ export function useTTS() {
   }, []);
 
   const stop = useCallback(() => {
-    // 1. Stop HTML5 audio (Gemini TTS)
+    // 1. Stop HTML5 audio (Azure / Gemini TTS)
     if (audioRef.current) {
       try {
         audioRef.current.pause();
@@ -194,15 +195,61 @@ export function useTTS() {
   }, []);
 
   /**
+   * Helper to play an audio Blob with HTML5 Audio element
+   */
+  const playAudioBlob = useCallback(
+    async (blob, rate = 1.0, onEnd, onError) => {
+      const blobUrl = URL.createObjectURL(blob);
+      currentBlobUrlRef.current = blobUrl;
+
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+
+      if (rate && rate !== 1.0) {
+        audio.playbackRate = Math.min(2.0, Math.max(0.5, rate));
+      }
+
+      audio.onplay = () => {
+        setIsSpeaking(true);
+        setIsPaused(false);
+        setIsLoadingAudio(false);
+      };
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        setIsPaused(false);
+        setIsLoadingAudio(false);
+        audioRef.current = null;
+        if (currentBlobUrlRef.current) {
+          URL.revokeObjectURL(currentBlobUrlRef.current);
+          currentBlobUrlRef.current = null;
+        }
+        if (onEnd) onEnd();
+      };
+
+      audio.onerror = (e) => {
+        console.warn('Audio element error:', e);
+        setIsSpeaking(false);
+        setIsPaused(false);
+        setIsLoadingAudio(false);
+        audioRef.current = null;
+        if (onError) onError(e);
+      };
+
+      await audio.play();
+    },
+    []
+  );
+
+  /**
    * speak(text, options)
-   * Uses Gemini 3.8 Flash TTS for heavy spiritual male voice when API key is present.
-   * Seamlessly falls back to deep male browser voice if offline or no key.
+   * Supports Microsoft Azure Neural Voice, Google Gemini 3.8 Flash TTS, and browser Web Speech.
    */
   const speak = useCallback(
     async (text, options = {}) => {
       if (!text || !text.trim()) return;
 
-      // Stop any current playback
+      // Stop any active playback
       stop();
 
       const {
@@ -210,7 +257,9 @@ export function useTTS() {
         rate = 0.85,
         pitch = 0.68,
         wordCount = false,
-        useGemini = true,
+        engine,
+        useAzure = false,
+        useGemini = false,
         onEnd,
         onError,
       } = options;
@@ -226,67 +275,68 @@ export function useTTS() {
         lang === 'ur-PK' ||
         (typeof lang === 'string' && lang.startsWith('ur'));
 
-      // Use Gemini TTS when:
-      // 1. Gemini API key is available and useGemini is enabled (Default)
-      // 2. OR text is Urdu and Gemini API key is available (authentic Urdu speech)
-      const shouldTryGemini = hasGeminiApiKey() && (useGemini || isUrduText);
+      const effectiveEngine =
+        engine ||
+        (useAzure ? 'azure' : useGemini ? 'gemini' : 'existing');
 
-      // ── Option A: Gemini 3.8 Flash TTS (Real Human Spiritual Male Voice) ──
+      // ── Option A: Microsoft Azure Neural Voice (ur-PK-AsadNeural / en-US-GuyNeural) ──
+      if (effectiveEngine === 'azure' && hasAzureSpeechKey()) {
+        setIsLoadingAudio(true);
+        try {
+          const audioBlob = await generateAzureNeuralSpeech(spokenContent, {
+            lang: isUrduText ? 'ur-PK' : lang,
+            rate,
+            pitch,
+          });
+          await playAudioBlob(audioBlob, rate, onEnd, onError);
+          return;
+        } catch (azureErr) {
+          console.warn('Azure Neural TTS failed, falling back to next available engine:', azureErr);
+          setIsLoadingAudio(false);
+        }
+      }
+
+      // ── Option B: Gemini 3.8 Flash TTS (Charon Spiritual Voice) ──
+      const shouldTryGemini =
+        (effectiveEngine === 'gemini' || (effectiveEngine === 'azure' && !hasAzureSpeechKey())) &&
+        hasGeminiApiKey();
+
       if (shouldTryGemini) {
         setIsLoadingAudio(true);
         try {
           const audioBlob = await getOrGenerateSpiritualSpeech(spokenContent, {
-            voice: 'Charon', // Heavy, resonant spiritual male baritone
+            voice: 'Charon',
           });
-
-          const blobUrl = URL.createObjectURL(audioBlob);
-          currentBlobUrlRef.current = blobUrl;
-
-          const audio = new Audio(blobUrl);
-          audioRef.current = audio;
-
-          // Apply slight rate scaling if specified
-          if (rate && rate !== 1.0) {
-            audio.playbackRate = Math.min(2.0, Math.max(0.6, rate));
-          }
-
-          audio.onplay = () => {
-            setIsSpeaking(true);
-            setIsPaused(false);
-            setIsLoadingAudio(false);
-          };
-
-          audio.onended = () => {
-            setIsSpeaking(false);
-            setIsPaused(false);
-            setIsLoadingAudio(false);
-            audioRef.current = null;
-            if (currentBlobUrlRef.current) {
-              URL.revokeObjectURL(currentBlobUrlRef.current);
-              currentBlobUrlRef.current = null;
-            }
-            if (onEnd) onEnd();
-          };
-
-          audio.onerror = (e) => {
-            console.warn('Audio element error:', e);
-            setIsSpeaking(false);
-            setIsPaused(false);
-            setIsLoadingAudio(false);
-            audioRef.current = null;
-            if (onError) onError(e);
-          };
-
-          await audio.play();
+          await playAudioBlob(audioBlob, rate, onEnd, onError);
           return;
         } catch (err) {
           console.warn('Gemini TTS playback failed, falling back to browser speech:', err);
           setIsLoadingAudio(false);
-          // Fall through to browser SpeechSynthesis
         }
       }
 
-      // ── Option B: Browser SpeechSynthesis Fallback ──
+      // If Azure is configured and user had 'existing' or fallback needed, try Azure for Urdu
+      if (isUrduText && hasAzureSpeechKey() && effectiveEngine === 'existing') {
+        // Only if browser has no Urdu voice
+        const currentVoices = synthRef.current?.getVoices() || voices;
+        const hasBrowserUrdu = currentVoices.some((v) => v.lang.startsWith('ur'));
+        if (!hasBrowserUrdu) {
+          try {
+            setIsLoadingAudio(true);
+            const audioBlob = await generateAzureNeuralSpeech(spokenContent, {
+              lang: 'ur-PK',
+              rate,
+              pitch,
+            });
+            await playAudioBlob(audioBlob, rate, onEnd, onError);
+            return;
+          } catch {
+            setIsLoadingAudio(false);
+          }
+        }
+      }
+
+      // ── Option C: Browser SpeechSynthesis Fallback ──
       if (!synthRef.current) {
         if (onError) onError(new Error('Speech synthesis not available'));
         return;
@@ -330,30 +380,34 @@ export function useTTS() {
       utteranceRef.current = utterance;
       synth.speak(utterance);
     },
-    [voices, stop]
+    [voices, stop, playAudioBlob]
   );
 
   /**
    * exportAudio(text, langOrOptions, filename)
-   * Generates a downloadable .wav audio file in heavy spiritual male voice.
+   * Generates a downloadable audio file (.mp3 / .wav) in heavy spiritual male voice.
    */
   const exportAudio = useCallback(
     async (text, langOrOptions = 'en-US', filenameArg = 'thought') => {
       if (!text || !text.trim()) return { success: false, error: 'Empty text' };
       setIsExporting(true);
 
-      const filename =
-        typeof langOrOptions === 'object'
-          ? (langOrOptions.filename || filenameArg)
-          : filenameArg;
+      const isOptObj = typeof langOrOptions === 'object' && langOrOptions !== null;
+      const filename = isOptObj ? (langOrOptions.filename || filenameArg) : filenameArg;
+      const engine = isOptObj ? langOrOptions.engine : undefined;
+      const lang = isOptObj ? langOrOptions.lang : langOrOptions;
 
       try {
         const cleanName = (filename || 'thought')
           .replace(/[^a-zA-Z0-9_\-\u0600-\u06FF]/g, '_')
           .slice(0, 50);
 
-        const wavBlob = await generateSpiritualVoiceWav(text);
-        triggerDownload(wavBlob, `${cleanName}-spiritual-voice.wav`);
+        const { blob, extension } = await generateSpiritualVoiceAudio(text, {
+          engine,
+          lang,
+        });
+
+        triggerDownload(blob, `${cleanName}-spiritual-voice.${extension}`);
         return { success: true };
       } catch (err) {
         console.error('Audio export error:', err);

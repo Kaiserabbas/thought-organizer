@@ -1,6 +1,7 @@
-// VoicePanel.jsx — Bilingual Voice Input with Groq Whisper AI (Urdu Script & English)
+// VoicePanel.jsx — Bilingual Voice Input with Groq Whisper AI & Microsoft Azure Speech
 // Features:
 // - Groq Whisper AI (whisper-large-v3-turbo & whisper-large-v3) for ultra-accurate Urdu Perso-Arabic script & bilingual code-switching
+// - Microsoft Azure Cognitive Speech (Neural STT for Urdu & English)
 // - Local Web Speech API fallback
 // - Direct voice recording + audio file upload
 // - Zero audio collisions and clean state management
@@ -17,11 +18,14 @@ import {
   Loader2,
   Upload,
   Radio,
+  Cloud,
 } from 'lucide-react';
 import { useVoice, containsUrdu, formatEnglishSentence } from './useVoice';
 import { useTTS } from './useTTS';
 import { useGroqWhisper } from './useGroqWhisper';
 import { hasGroqApiKey } from './groqService';
+import { useAzureSpeech } from './useAzureSpeech';
+import { hasAzureSpeechKey } from './azureSpeechService';
 
 /**
  * VoicePanel
@@ -43,7 +47,11 @@ export default function VoicePanel({
 }) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [sttEngine, setSttEngine]       = useState(() => (hasGroqApiKey() ? 'groq' : 'webspeech'));
+  const [sttEngine, setSttEngine]       = useState(() => {
+    if (hasGroqApiKey()) return 'groq';
+    if (hasAzureSpeechKey()) return 'azure';
+    return 'webspeech';
+  });
   const [recordSeconds, setRecordSeconds] = useState(0);
 
   const canvasRef     = useRef(null);
@@ -87,6 +95,14 @@ export default function VoicePanel({
     },
   });
 
+  // ── Microsoft Azure Speech Engine ──────────────────────────────────
+  const azureSpeech = useAzureSpeech({
+    lang: currentLang === 'ur-PK' || currentLang === 'auto' ? 'ur' : 'en',
+    onTranscribed: (text) => {
+      if (onNewChunk) onNewChunk(text);
+    },
+  });
+
   // Sync external lang prop → internal
   useEffect(() => {
     setCurrentLang(lang);
@@ -103,12 +119,21 @@ export default function VoicePanel({
   const activeTranscript =
     sttEngine === 'groq'
       ? groqWhisper.transcription || webSpeechTranscript
+      : sttEngine === 'azure'
+      ? azureSpeech.transcription || webSpeechTranscript
       : webSpeechTranscript;
 
   const isRecording =
-    sttEngine === 'groq' ? groqWhisper.isRecording : isWebSpeechListening;
+    sttEngine === 'groq'
+      ? groqWhisper.isRecording
+      : sttEngine === 'azure'
+      ? azureSpeech.isRecording
+      : isWebSpeechListening;
 
-  const isBusy = groqWhisper.isTranscribing || isRecording;
+  const isTranscribing =
+    groqWhisper.isTranscribing || azureSpeech.isTranscribing;
+
+  const isBusy = isTranscribing || isRecording;
 
   // ── Elapsed recording timer ────────────────────────────────────────
   useEffect(() => {
@@ -193,29 +218,38 @@ export default function VoicePanel({
   const handleStartListening = useCallback(async () => {
     if (sttEngine === 'groq') {
       await groqWhisper.startRecording();
+    } else if (sttEngine === 'azure') {
+      await azureSpeech.startRecording();
     } else {
       startWebSpeech();
     }
-  }, [sttEngine, groqWhisper, startWebSpeech]);
+  }, [sttEngine, groqWhisper, azureSpeech, startWebSpeech]);
 
   const handleStopListening = useCallback(async () => {
     if (sttEngine === 'groq') {
       await groqWhisper.stopRecording();
+    } else if (sttEngine === 'azure') {
+      await azureSpeech.stopRecording();
     } else {
       stopWebSpeech();
     }
-  }, [sttEngine, groqWhisper, stopWebSpeech]);
+  }, [sttEngine, groqWhisper, azureSpeech, stopWebSpeech]);
 
   const resetTranscript = useCallback(() => {
     groqWhisper.resetTranscription();
+    azureSpeech.resetTranscription();
     resetWebSpeechTranscript();
-  }, [groqWhisper, resetWebSpeechTranscript]);
+  }, [groqWhisper, azureSpeech, resetWebSpeechTranscript]);
 
   // ── File Upload Handler ────────────────────────────────────────────
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    await groqWhisper.transcribeAudioFile(file);
+    if (sttEngine === 'azure') {
+      await azureSpeech.transcribeAudioFile(file);
+    } else {
+      await groqWhisper.transcribeAudioFile(file);
+    }
     if (audioFileRef.current) audioFileRef.current.value = '';
   };
 
@@ -259,7 +293,7 @@ export default function VoicePanel({
       lang: currentLang === 'auto' ? (containsUrdu(activeTranscript) ? 'ur-PK' : 'en-US') : currentLang,
       rate: ttsRate,
       pitch: ttsPitch,
-      useGemini: voiceEngine === 'gemini',
+      engine: voiceEngine,
       onError: (err) => {
         if (err?.code === 'MISSING_GEMINI_KEY' && onRequireGeminiKey) {
           onRequireGeminiKey();
@@ -268,18 +302,22 @@ export default function VoicePanel({
     });
   };
 
-  // ── Export Audio (.wav) ────────────────────────────────────
-  const handleExportWav = async () => {
+  // ── Export Audio (.mp3 / .wav) ─────────────────────────────────────
+  const handleExportAudio = async () => {
     if (!activeTranscript) return;
     const targetLang = currentLang === 'auto' ? (containsUrdu(activeTranscript) ? 'ur-PK' : 'en-US') : currentLang;
-    const res = await exportAudio(activeTranscript, targetLang, 'voice-thought');
+    const res = await exportAudio(activeTranscript, {
+      lang: targetLang,
+      engine: voiceEngine,
+      filename: 'voice-thought',
+    });
     if (res && res.code === 'MISSING_GEMINI_KEY') {
       if (onRequireGeminiKey) onRequireGeminiKey();
     }
   };
 
   const isUrdu = currentLang === 'ur-PK' || containsUrdu(activeTranscript + interimTranscript);
-  const activeError = groqWhisper.error || webSpeechError;
+  const activeError = groqWhisper.error || azureSpeech.error || webSpeechError;
 
   return (
     <div className={`voice-panel ${isCollapsed ? 'voice-panel-collapsed' : ''}`}>
@@ -289,7 +327,7 @@ export default function VoicePanel({
           <Mic size={16} />
           <span>Voice Thought Input</span>
           {isRecording && <span className="voice-live-badge recording">● RECORDING ({formatTimer(recordSeconds)})</span>}
-          {groqWhisper.isTranscribing && <span className="voice-live-badge transcribing">⚡ TRANSCRIBING...</span>}
+          {isTranscribing && <span className="voice-live-badge transcribing">⚡ TRANSCRIBING...</span>}
         </div>
         <div className="voice-header-right">
           <button
@@ -319,6 +357,18 @@ export default function VoicePanel({
                 <span>Groq Whisper AI</span>
                 <span className="pill-badge">Recommended</span>
               </button>
+
+              <button
+                type="button"
+                className={`engine-pill ${sttEngine === 'azure' ? 'active' : ''}`}
+                onClick={() => setSttEngine('azure')}
+                title="Microsoft Azure Speech: neural cloud STT for Urdu & English"
+              >
+                <Cloud size={13} />
+                <span>Azure Speech</span>
+                <span className="pill-badge azure">eastus</span>
+              </button>
+
               <button
                 type="button"
                 className={`engine-pill ${sttEngine === 'webspeech' ? 'active' : ''}`}
@@ -386,13 +436,13 @@ export default function VoicePanel({
           <div className="voice-mic-container">
             <button
               type="button"
-              className={`voice-mic-btn ${isRecording ? 'active recording' : ''} ${groqWhisper.isTranscribing ? 'transcribing' : ''}`}
+              className={`voice-mic-btn ${isRecording ? 'active recording' : ''} ${isTranscribing ? 'transcribing' : ''}`}
               onClick={isRecording ? handleStopListening : handleStartListening}
-              disabled={groqWhisper.isTranscribing}
+              disabled={isTranscribing}
               aria-label={isRecording ? 'Stop recording & transcribe' : 'Start speaking'}
               title={isRecording ? 'Click to finish speaking & transcribe' : 'Click mic to speak'}
             >
-              {groqWhisper.isTranscribing ? (
+              {isTranscribing ? (
                 <Loader2 size={24} className="spin-icon" />
               ) : isRecording ? (
                 <MicOff size={24} />
@@ -405,6 +455,8 @@ export default function VoicePanel({
               <strong>
                 {groqWhisper.isTranscribing
                   ? '⚡ Groq Whisper AI is transcribing into Urdu script...'
+                  : azureSpeech.isTranscribing
+                  ? '☁️ Azure Speech is transcribing into Urdu script...'
                   : isRecording
                   ? (currentLang === 'ur-PK'
                       ? `🔴 بولیں... سن رہا ہوں (${formatTimer(recordSeconds)}) — مکمل ہونے پر مائیک دبائیں`
@@ -416,12 +468,14 @@ export default function VoicePanel({
               <span className="voice-mic-sub">
                 {sttEngine === 'groq'
                   ? 'Powered by Groq Whisper Large-v3. Converts speech accurately into authentic Urdu Perso-Arabic script.'
+                  : sttEngine === 'azure'
+                  ? 'Powered by Microsoft Azure Speech Services. Real-time cloud transcription in Urdu & English.'
                   : 'Browser local recognition. Pauses add punctuation.'}
               </span>
             </div>
 
             {/* Upload audio file button */}
-            {sttEngine === 'groq' && (
+            {(sttEngine === 'groq' || sttEngine === 'azure') && (
               <div className="voice-upload-action">
                 <input
                   type="file"
@@ -451,14 +505,14 @@ export default function VoicePanel({
 
           {/* Transcript Preview */}
           <div
-            className={`transcript-box ${isRecording ? 'active' : ''} ${groqWhisper.isTranscribing ? 'loading' : ''}`}
+            className={`transcript-box ${isRecording ? 'active' : ''} ${isTranscribing ? 'loading' : ''}`}
             dir={isUrdu ? 'rtl' : 'ltr'}
             lang={isUrdu ? 'ur' : 'en'}
           >
-            {groqWhisper.isTranscribing ? (
+            {isTranscribing ? (
               <div className="transcript-loading-row">
                 <Loader2 size={16} className="spin-icon" />
-                <span>Transcribing audio with Groq Whisper ({groqWhisper.whisperModel})...</span>
+                <span>Transcribing audio with {sttEngine === 'azure' ? 'Microsoft Azure Speech' : 'Groq Whisper'}...</span>
               </div>
             ) : activeTranscript || interimTranscript ? (
               <>
@@ -501,7 +555,7 @@ export default function VoicePanel({
                 className="voice-action-btn"
                 onClick={handleSpeak}
                 disabled={isSpeaking || isLoadingAudio}
-                title={voiceEngine === 'gemini' ? 'Listen back in Gemini spiritual voice' : 'Listen back in voice'}
+                title={voiceEngine === 'azure' ? 'Listen back in Azure Neural Voice (ur-PK-AsadNeural)' : voiceEngine === 'gemini' ? 'Listen back in Gemini spiritual voice' : 'Listen back in voice'}
               >
                 {isLoadingAudio ? <Loader2 size={14} className="spin-icon" /> : <Volume2 size={14} />}
                 <span>{isLoadingAudio ? 'Loading...' : isSpeaking ? 'Playing...' : 'Listen'}</span>
@@ -510,12 +564,12 @@ export default function VoicePanel({
               <button
                 type="button"
                 className="voice-action-btn voice-export-btn"
-                onClick={handleExportWav}
+                onClick={handleExportAudio}
                 disabled={isExporting}
-                title="Export as .wav audio file in heavy spiritual male voice"
+                title="Export audio file (.mp3 / .wav) in heavy spiritual male voice"
               >
                 <Download size={14} />
-                <span>{isExporting ? 'Exporting...' : 'Export Audio (.wav)'}</span>
+                <span>{isExporting ? 'Exporting...' : 'Export Audio'}</span>
               </button>
 
               <button
@@ -543,7 +597,11 @@ export default function VoicePanel({
           {/* Footer note */}
           <div className="voice-commands-hint">
             <span>
-              ⚡ Powered by <strong>Groq Whisper LPU</strong>: Transcribes Urdu in authentic حروفِ تہجی with code-switching
+              {sttEngine === 'azure' ? (
+                <>☁️ Powered by <strong>Microsoft Azure Speech</strong>: Neural Urdu STT with cloud recognition</>
+              ) : (
+                <>⚡ Powered by <strong>Groq Whisper LPU</strong>: Transcribes Urdu in authentic حروفِ تہجی with code-switching</>
+              )}
             </span>
           </div>
         </div>

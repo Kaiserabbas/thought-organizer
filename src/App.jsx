@@ -1079,6 +1079,8 @@ export default function App() {
       lang,
       rate: ttsRate,
       pitch: ttsPitch,
+      engine: voiceEngine,
+      useAzure: voiceEngine === 'azure',
       useGemini: voiceEngine === 'gemini',
       onEnd: () => setActiveSpeakingThoughtId(null),
       onError: (err) => {
@@ -1116,6 +1118,8 @@ export default function App() {
       lang: detectedLang,
       rate: ttsRate,
       pitch: ttsPitch,
+      engine: voiceEngine,
+      useAzure: voiceEngine === 'azure',
       useGemini: voiceEngine === 'gemini',
       onEnd: () => setActiveSpeakingThoughtId(null),
       onError: (err) => {
@@ -1139,7 +1143,7 @@ export default function App() {
     setIsExportingAudio(true);
     const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
     const filename = `${(selectedThought.subject || 'spiritual-thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
-    const res = await exportAudio(fullText, { lang: detectedLang, filename });
+    const res = await exportAudio(fullText, { lang: detectedLang, filename, engine: voiceEngine });
     setIsExportingAudio(false);
 
     if (res && res.code === 'MISSING_GEMINI_KEY') {
@@ -1380,7 +1384,9 @@ export default function App() {
                           lang: isUr ? 'ur-PK' : voiceLang,
                           rate: ttsRate,
                           pitch: ttsPitch,
-                          useGemini: voiceEngine === 'gemini',
+                          engine: voiceEngine,
+      useAzure: voiceEngine === 'azure',
+      useGemini: voiceEngine === 'gemini',
                           onEnd: () => setActiveSpeakingThoughtId(null),
                           onError: (err) => {
                             setActiveSpeakingThoughtId(null);
@@ -1419,7 +1425,7 @@ export default function App() {
                         setIsExportingAudio(true);
                         const isUr = containsUrdu(draftText);
                         const filename = `${(formData.subject || 'thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
-                        const res = await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename });
+                        const res = await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename, engine: voiceEngine });
                         setIsExportingAudio(false);
                         if (res && res.code === 'MISSING_GEMINI_KEY') {
                           setIsGeminiModalOpen(true);
@@ -1858,7 +1864,9 @@ export default function App() {
                 lang,
                 rate: ttsRate,
                 pitch: ttsPitch,
-                useGemini: voiceEngine === 'gemini',
+                engine: voiceEngine,
+      useAzure: voiceEngine === 'azure',
+      useGemini: voiceEngine === 'gemini',
               });
             }}
           />
