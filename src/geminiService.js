@@ -189,7 +189,9 @@ export async function transcribeAudioWithGemini(audioBlob, lang = 'ur-PK') {
 export async function generateGeminiSpiritualSpeech(text, { voice = 'Charon' } = {}) {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error('MISSING_API_KEY');
+    const err = new Error('Gemini API key is required');
+    err.code = 'MISSING_GEMINI_KEY';
+    throw err;
   }
 
   const cleanText = text.trim();
@@ -197,85 +199,135 @@ export async function generateGeminiSpiritualSpeech(text, { voice = 'Charon' } =
     throw new Error('Text cannot be empty');
   }
 
-  // Gemini 3.8 Flash TTS supports structured speech_metadata styling
-  const styleInstruction = 'deep, heavy, spiritual, resonant, solemn male baritone voice with calm, reverent cadence';
-
-  const payload = {
-    model: 'gemini-3.8-flash-tts',
-    input: [
-      {
-        type: 'user_input',
-        content: [
+  // Method 1: Google Gemini Models API with AUDIO response modality (gemini-2.5-flash / gemini-2.0-flash)
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
           {
-            type: 'text',
-            text: cleanText,
-            annotations: [
+            role: 'user',
+            parts: [
               {
-                type: 'speech_metadata',
-                style: styleInstruction,
+                text: `Read the following text aloud with a deep, heavy, spiritual, resonant, and calm male voice. Read only the words:\n\n${cleanText}`,
               },
             ],
           },
         ],
-      },
-    ],
-    response_format: {
-      type: 'audio',
-      mime_type: 'audio/wav',
-    },
-    generation_config: {
-      speech_config: [
-        {
-          voice: voice || 'Charon',
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: voice || 'Charon',
+              },
+            },
+          },
         },
-      ],
-    },
-  };
+      };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `Gemini TTS error ${res.status}`);
-  }
-
-  const data = await res.json();
-
-  // Extract audio base64 from response
-  let base64Audio = null;
-  if (data?.output_audio?.data) {
-    base64Audio = data.output_audio.data;
-  } else if (data?.steps) {
-    for (const step of data.steps) {
-      if (step.type === 'model_output' && Array.isArray(step.content)) {
-        for (const item of step.content) {
-          if (item.type === 'audio' && item.data) {
-            base64Audio = item.data;
-            break;
+      if (res.ok) {
+        const data = await res.json();
+        const part = data?.candidates?.[0]?.content?.parts?.find(
+          (p) => p.inlineData && p.inlineData.data
+        );
+        if (part && part.inlineData.data) {
+          const mimeType = part.inlineData.mimeType || 'audio/wav';
+          const byteCharacters = atob(part.inlineData.data);
+          const byteNumbers = new Uint8Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
           }
+          return new Blob([byteNumbers], { type: mimeType });
         }
       }
-      if (base64Audio) break;
+    } catch {
+      // try next model or fallback
     }
   }
 
-  if (!base64Audio) {
-    throw new Error('No audio returned by Gemini TTS');
+  // Method 2: Interactions API fallback
+  try {
+    const styleInstruction = 'deep, heavy, spiritual, resonant, solemn male baritone voice with calm, reverent cadence';
+    const payload = {
+      model: 'gemini-3.8-flash-tts',
+      input: [
+        {
+          type: 'user_input',
+          content: [
+            {
+              type: 'text',
+              text: cleanText,
+              annotations: [
+                {
+                  type: 'speech_metadata',
+                  style: styleInstruction,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      response_format: {
+        type: 'audio',
+        mime_type: 'audio/wav',
+      },
+      generation_config: {
+        speech_config: [
+          {
+            voice: voice || 'Charon',
+          },
+        ],
+      },
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      let base64Audio = null;
+      if (data?.output_audio?.data) {
+        base64Audio = data.output_audio.data;
+      } else if (data?.steps) {
+        for (const step of data.steps) {
+          if (step.type === 'model_output' && Array.isArray(step.content)) {
+            for (const item of step.content) {
+              if (item.type === 'audio' && item.data) {
+                base64Audio = item.data;
+                break;
+              }
+            }
+          }
+          if (base64Audio) break;
+        }
+      }
+
+      if (base64Audio) {
+        const byteCharacters = atob(base64Audio);
+        const byteNumbers = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        return new Blob([byteNumbers], { type: 'audio/wav' });
+      }
+    }
+  } catch {
+    // fallback
   }
 
-  // Convert base64 to Blob
-  const byteCharacters = atob(base64Audio);
-  const byteNumbers = new Uint8Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-
-  return new Blob([byteNumbers], { type: 'audio/wav' });
+  throw new Error('Gemini TTS was unable to generate audio for this post.');
 }
 
 // In-memory cache for generated spiritual speech audio Blobs

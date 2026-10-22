@@ -7,6 +7,7 @@ import CollectionsView from './CollectionsView';
 import SettingsView from './SettingsView';
 import ConfirmModal from './ConfirmModal';
 import GeminiKeyModal from './GeminiKeyModal';
+import PostSoundPlayer from './PostSoundPlayer';
 import VoicePanel from './VoicePanel';
 import { useTTS } from './useTTS';
 import { containsUrdu, formatEnglishSentence } from './useVoice';
@@ -34,15 +35,12 @@ import {
   LogOut,
   Moon,
   Palette,
-  Pause,
   Pencil,
-  Play,
   Quote,
   RotateCw,
   Save,
   Settings,
   Sparkles,
-  Square,
   Star,
   Sun,
   Tag,
@@ -311,7 +309,7 @@ export default function App() {
 
   // ── Voice & Audio state ──
   const [voiceLang, setVoiceLang] = useState('en-US');
-  const [showTTSPlayer, setShowTTSPlayer] = useState(false);
+
   const [ttsRate, setTtsRate] = useState(() => {
     const saved = localStorage.getItem('tts_playback_rate');
     return saved ? parseFloat(saved) : 0.85;
@@ -327,7 +325,7 @@ export default function App() {
     }
     return saved;
   });
-  const [ttsLang, setTtsLang] = useState('en-US');
+
   const [activeSpeakingThoughtId, setActiveSpeakingThoughtId] = useState(null);
   const [showTranslated, setShowTranslated] = useState(false);
   const [translatedThought, setTranslatedThought] = useState(null);
@@ -335,7 +333,7 @@ export default function App() {
   const [isTranslatingThought, setIsTranslatingThought] = useState(false);
   const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
 
-  const { speak, stop: ttsStop, pause: ttsPause, resume: ttsResume, isSpeaking, isPaused, isLoadingAudio, exportAudio } = useTTS();
+  const { speak, stop: ttsStop, isSpeaking, isLoadingAudio, exportAudio } = useTTS();
   const { translate } = useTranslate();
 
   const closeSelectedThought = useCallback(() => {
@@ -343,7 +341,6 @@ export default function App() {
     setIsEditingThought(false);
     setCopiedThought(false);
     ttsStop();
-    setShowTTSPlayer(false);
     setShowTranslated(false);
     setTranslatedThought(null);
     setActiveSpeakingThoughtId(null);
@@ -1096,70 +1093,7 @@ export default function App() {
     });
   };
 
-  const handleToggleTTSPlayer = () => {
-    if (showTTSPlayer && (isSpeaking || isLoadingAudio)) {
-      ttsStop();
-      setActiveSpeakingThoughtId(null);
-    }
-    setShowTTSPlayer((prev) => !prev);
-  };
 
-  const handlePlayPauseTTS = () => {
-    if (!selectedThought) return;
-    if (isSpeaking && !isPaused) {
-      ttsPause();
-      return;
-    }
-    if (isPaused) {
-      ttsResume();
-      return;
-    }
-    const fullText = `${selectedThought.subject ? selectedThought.subject + '. ' : ''}${selectedThought.description || ''}`.trim();
-    if (!fullText) return;
-    const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
-    setActiveSpeakingThoughtId(selectedThought.id);
-    speak(fullText, {
-      lang: detectedLang,
-      rate: ttsRate,
-      pitch: ttsPitch,
-      engine: voiceEngine,
-      useAzure: voiceEngine === 'azure',
-      useGemini: voiceEngine === 'gemini',
-      onEnd: () => setActiveSpeakingThoughtId(null),
-      onError: (err) => {
-        setActiveSpeakingThoughtId(null);
-        if (err?.code === 'MISSING_GEMINI_KEY') {
-          setIsGeminiModalOpen(true);
-        }
-      },
-    });
-  };
-
-  const handleStopTTS = () => {
-    ttsStop();
-    setActiveSpeakingThoughtId(null);
-  };
-
-  const handleExportSelectedAudio = async () => {
-    if (!selectedThought) return;
-    const fullText = `${selectedThought.subject ? selectedThought.subject + '. ' : ''}${selectedThought.description || ''}`.trim();
-    if (!fullText) return;
-    setIsExportingAudio(true);
-    const detectedLang = containsUrdu(fullText) ? 'ur-PK' : ttsLang;
-    const filename = `${(selectedThought.subject || 'spiritual-thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
-    const res = await exportAudio(fullText, { lang: detectedLang, filename, engine: voiceEngine });
-    setIsExportingAudio(false);
-
-    if (res && res.code === 'MISSING_GEMINI_KEY') {
-      setIsGeminiModalOpen(true);
-      return;
-    }
-    if (res && !res.success) {
-      showPasteToast(`Export failed: ${res.error || 'Check connection'}`);
-      return;
-    }
-    showPasteToast('Spiritual voice audio (.wav) exported!');
-  };
 
   const handleToggleTranslateSelected = async () => {
     if (showTranslated) {
@@ -1904,34 +1838,7 @@ export default function App() {
                       {copiedThought ? <Check size={17} /> : <Copy size={17} />}
                     </button>
 
-                    {/* Listen in Spiritual Voice (Gemini TTS) */}
-                    <button
-                      type="button"
-                      className={`icon-button tts-listen-btn ${showTTSPlayer ? 'active' : ''} ${(isSpeaking || isLoadingAudio) && activeSpeakingThoughtId === selectedThought.id ? 'active-speaking' : ''}`}
-                      onClick={handleToggleTTSPlayer}
-                      aria-label="Listen in spiritual voice"
-                      title={showTTSPlayer ? 'Hide spiritual player' : 'Listen in spiritual voice (Gemini TTS)'}
-                    >
-                      {isLoadingAudio && activeSpeakingThoughtId === selectedThought.id ? (
-                        <Loader2 size={17} className="spin-icon" />
-                      ) : isSpeaking && activeSpeakingThoughtId === selectedThought.id ? (
-                        <VolumeX size={17} />
-                      ) : (
-                        <Volume2 size={17} />
-                      )}
-                    </button>
 
-                    {/* Export Audio (.wav) */}
-                    <button
-                      type="button"
-                      className={`icon-button tts-export-btn ${isExportingAudio ? 'exporting' : ''}`}
-                      onClick={handleExportSelectedAudio}
-                      disabled={isExportingAudio}
-                      aria-label="Export spiritual audio (.wav)"
-                      title="Export audio (.wav) in heavy spiritual male voice"
-                    >
-                      <Download size={17} />
-                    </button>
 
                     {/* Translate Thought */}
                     <button
@@ -1986,88 +1893,14 @@ export default function App() {
               </div>
             </div>
 
-            {/* Spiritual Voice Player Drawer */}
-            {showTTSPlayer && !isEditingThought && (
-              <div className="spiritual-voice-player">
-                <div className="player-top-row">
-                  <div className="voice-identity">
-                    <span className="voice-badge">🎙 Spiritual Deep Voice</span>
-                    <span className="voice-speed-indicator">{ttsRate}x · Male Resonance</span>
-                  </div>
-
-                  <div className="player-controls">
-                    <button
-                      type="button"
-                      className="player-btn primary-play"
-                      onClick={handlePlayPauseTTS}
-                      title={isSpeaking && !isPaused ? 'Pause' : 'Play'}
-                    >
-                      {isSpeaking && !isPaused ? <Pause size={14} /> : <Play size={14} />}
-                      {isSpeaking && !isPaused ? 'Pause' : isPaused ? 'Resume' : 'Play'}
-                    </button>
-
-                    {isSpeaking && (
-                      <button
-                        type="button"
-                        className="player-btn"
-                        onClick={handleStopTTS}
-                        title="Stop playback"
-                      >
-                        <Square size={14} /> Stop
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      className="player-btn export-btn"
-                      onClick={handleExportSelectedAudio}
-                      disabled={isExportingAudio}
-                      title="Export audio as WAV"
-                    >
-                      <Download size={14} /> {isExportingAudio ? 'Exporting...' : 'Export .wav'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="player-bottom-row">
-                  <div className={`audio-soundwave ${isSpeaking && !isPaused ? 'playing' : ''}`}>
-                    <span className="wave-bar bar-1" />
-                    <span className="wave-bar bar-2" />
-                    <span className="wave-bar bar-3" />
-                    <span className="wave-bar bar-4" />
-                    <span className="wave-bar bar-5" />
-                  </div>
-
-                  <div className="speed-pills">
-                    <span className="speed-label">Lang:</span>
-                    <button
-                      type="button"
-                      className={`speed-pill ${ttsLang === 'en-US' ? 'active' : ''}`}
-                      onClick={() => setTtsLang('en-US')}
-                    >
-                      EN
-                    </button>
-                    <button
-                      type="button"
-                      className={`speed-pill ${ttsLang === 'ur-PK' ? 'active' : ''}`}
-                      onClick={() => setTtsLang('ur-PK')}
-                    >
-                      اردو
-                    </button>
-                    <span className="speed-label" style={{ marginLeft: 6 }}>Speed:</span>
-                    {[0.75, 0.85, 1.0, 1.25].map((rate) => (
-                      <button
-                        key={rate}
-                        type="button"
-                        className={`speed-pill ${ttsRate === rate ? 'active' : ''}`}
-                        onClick={() => setTtsRate(rate)}
-                      >
-                        {rate}x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            {/* Dedicated Google Gemini SoundPlayer with Track Time (Only visible in full post view) */}
+            {!isEditingThought && (
+              <PostSoundPlayer
+                thought={selectedThought}
+                onRequireGeminiKey={() => setIsGeminiModalOpen(true)}
+                defaultRate={ttsRate}
+                defaultPitch={ttsPitch}
+              />
             )}
 
             {/* Translation View Block */}
