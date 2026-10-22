@@ -5,9 +5,12 @@ import {
   Database,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   Heart,
   HelpCircle,
   Key,
+  Loader2,
   LogOut,
   Moon,
   Play,
@@ -22,9 +25,15 @@ import {
   Upload,
   Volume2,
   Zap,
+  ClipboardPaste,
+  Copy,
+  X,
+  Sliders,
+  Cloud,
 } from 'lucide-react';
 import { getGeminiApiKey, setGeminiApiKey, testGeminiApiKey } from './geminiService';
 import {
+  DEFAULT_GROQ_API_KEY,
   getGroqApiKey,
   setGroqApiKey,
   testGroqApiKey,
@@ -58,43 +67,96 @@ export default function SettingsView({
   onStopTTS,
   onTestSpeak,
 }) {
+  const [activeTab, setActiveTab] = useState('all');
+
+  // Categories & Backup
   const [newCatInput, setNewCatInput] = useState('');
   const [catError, setCatError] = useState('');
   const [showOAuthHelp, setShowOAuthHelp] = useState(false);
   const [showManualToken, setShowManualToken] = useState(false);
   const [manualTokenInput, setManualTokenInput] = useState('');
-  const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiApiKey());
-  const [isGeminiTesting, setIsGeminiTesting] = useState(false);
-  const [geminiStatusMsg, setGeminiStatusMsg] = useState({ text: '', type: '' });
-  const [groqKeyInput, setGroqKeyInput] = useState(() => getGroqApiKey());
-  const [groqModel, setGroqModel] = useState(() => getGroqWhisperModel());
-  const [isGroqTesting, setIsGroqTesting] = useState(false);
-  const [groqStatusMsg, setGroqStatusMsg] = useState({ text: '', type: '' });
-  const [resetFeedback, setResetFeedback] = useState(false);
+  const [showManualTokenSecret, setShowManualTokenSecret] = useState(false);
   const fileInputRef = useRef(null);
 
-  const handleSaveGroqKey = async (e) => {
-    if (e) e.preventDefault();
-    setGroqStatusMsg({ text: '', type: '' });
+  // Groq Whisper AI
+  const [groqKeyInput, setGroqKeyInput] = useState(() => getGroqApiKey());
+  const [groqModel, setGroqModel] = useState(() => getGroqWhisperModel());
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [groqCopied, setGroqCopied] = useState(false);
+  const [groqSavedFeedback, setGroqSavedFeedback] = useState(false);
+  const [isGroqTesting, setIsGroqTesting] = useState(false);
+  const [groqStatusMsg, setGroqStatusMsg] = useState({ text: '', type: '' });
+
+  // Google Gemini AI
+  const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiApiKey());
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [geminiCopied, setGeminiCopied] = useState(false);
+  const [geminiSavedFeedback, setGeminiSavedFeedback] = useState(false);
+  const [isGeminiTesting, setIsGeminiTesting] = useState(false);
+  const [geminiStatusMsg, setGeminiStatusMsg] = useState({ text: '', type: '' });
+
+  // Playback settings reset
+  const [resetFeedback, setResetFeedback] = useState(false);
+
+  // ── Groq Handlers ──
+  const handleSaveOnlyGroqKey = () => {
+    const cleanKey = groqKeyInput.trim();
+    setGroqApiKey(cleanKey);
+    setGroqSavedFeedback(true);
+    setGroqStatusMsg({
+      text: cleanKey
+        ? '✓ Groq API Key permanently saved in browser localStorage.'
+        : 'Groq API Key cleared (reset to default).',
+      type: 'success',
+    });
+    setTimeout(() => setGroqSavedFeedback(false), 2400);
+  };
+
+  const handleTestGroqKey = async () => {
     const cleanKey = groqKeyInput.trim();
     if (!cleanKey) {
-      setGroqApiKey('');
-      setGroqStatusMsg({ text: 'Groq API key reset to default', type: 'info' });
+      setGroqStatusMsg({ text: 'Please enter a Groq API Key to test.', type: 'error' });
       return;
     }
     setIsGroqTesting(true);
+    setGroqStatusMsg({ text: '', type: '' });
     try {
       const result = await testGroqApiKey(cleanKey);
       setGroqApiKey(cleanKey);
       setGroqStatusMsg({
-        text: `Groq Whisper connected! (${result.models.filter((m) => m.includes('whisper')).join(', ') || 'Ready'})`,
+        text: `✓ Connected to Groq Cloud in ${result.latency}ms! (Available: ${result.models.filter((m) => m.includes('whisper')).join(', ') || 'Whisper Large v3'})`,
         type: 'success',
       });
     } catch (err) {
-      setGroqStatusMsg({ text: `Connection failed: ${err.message}`, type: 'error' });
+      setGroqStatusMsg({ text: `Connection test failed: ${err.message}`, type: 'error' });
     } finally {
       setIsGroqTesting(false);
     }
+  };
+
+  const handleCopyGroqKey = () => {
+    if (!groqKeyInput) return;
+    navigator.clipboard?.writeText(groqKeyInput);
+    setGroqCopied(true);
+    setTimeout(() => setGroqCopied(false), 1600);
+  };
+
+  const handlePasteGroqKey = async () => {
+    try {
+      const text = await navigator.clipboard?.readText();
+      if (text) {
+        setGroqKeyInput(text.trim());
+        setGroqStatusMsg({ text: '', type: '' });
+      }
+    } catch {
+      // fallback
+    }
+  };
+
+  const handleResetGroqDefault = () => {
+    setGroqKeyInput(DEFAULT_GROQ_API_KEY);
+    setGroqApiKey(DEFAULT_GROQ_API_KEY);
+    setGroqStatusMsg({ text: 'Restored pre-configured Groq API key.', type: 'info' });
   };
 
   const handleSelectGroqModel = (model) => {
@@ -102,6 +164,62 @@ export default function SettingsView({
     setGroqWhisperModel(model);
   };
 
+  // ── Gemini Handlers ──
+  const handleSaveOnlyGeminiKey = () => {
+    const cleanKey = geminiKeyInput.trim();
+    setGeminiApiKey(cleanKey);
+    setGeminiSavedFeedback(true);
+    setGeminiStatusMsg({
+      text: cleanKey
+        ? '✓ Gemini API Key permanently saved in browser storage.'
+        : 'Gemini API Key cleared.',
+      type: cleanKey ? 'success' : 'info',
+    });
+    setTimeout(() => setGeminiSavedFeedback(false), 2400);
+  };
+
+  const handleTestGeminiKey = async () => {
+    const cleanKey = geminiKeyInput.trim();
+    if (!cleanKey) {
+      setGeminiStatusMsg({ text: 'Please enter a Gemini API Key to test.', type: 'error' });
+      return;
+    }
+    setIsGeminiTesting(true);
+    setGeminiStatusMsg({ text: '', type: '' });
+    try {
+      const result = await testGeminiApiKey(cleanKey);
+      setGeminiApiKey(cleanKey);
+      setGeminiStatusMsg({
+        text: `✓ Connected to Google Gemini in ${result.latency || 200}ms! Studio voice ready.`,
+        type: 'success',
+      });
+    } catch (err) {
+      setGeminiStatusMsg({ text: `Connection failed: ${err.message}`, type: 'error' });
+    } finally {
+      setIsGeminiTesting(false);
+    }
+  };
+
+  const handleCopyGeminiKey = () => {
+    if (!geminiKeyInput) return;
+    navigator.clipboard?.writeText(geminiKeyInput);
+    setGeminiCopied(true);
+    setTimeout(() => setGeminiCopied(false), 1600);
+  };
+
+  const handlePasteGeminiKey = async () => {
+    try {
+      const text = await navigator.clipboard?.readText();
+      if (text) {
+        setGeminiKeyInput(text.trim());
+        setGeminiStatusMsg({ text: '', type: '' });
+      }
+    } catch {
+      // fallback
+    }
+  };
+
+  // ── Audio Settings Reset ──
   const handleResetDefaults = () => {
     if (setTtsRate) setTtsRate(0.85);
     if (setTtsPitch) setTtsPitch(0.68);
@@ -110,27 +228,7 @@ export default function SettingsView({
     setTimeout(() => setResetFeedback(false), 2000);
   };
 
-  const handleSaveGeminiKey = async (e) => {
-    if (e) e.preventDefault();
-    setGeminiStatusMsg({ text: '', type: '' });
-    const cleanKey = geminiKeyInput.trim();
-    if (!cleanKey) {
-      setGeminiApiKey('');
-      setGeminiStatusMsg({ text: 'API key cleared', type: 'info' });
-      return;
-    }
-    setIsGeminiTesting(true);
-    try {
-      await testGeminiApiKey(cleanKey);
-      setGeminiApiKey(cleanKey);
-      setGeminiStatusMsg({ text: 'Gemini connected successfully! Studio voice & Urdu AI active.', type: 'success' });
-    } catch (err) {
-      setGeminiStatusMsg({ text: `Connection failed: ${err.message}`, type: 'error' });
-    } finally {
-      setIsGeminiTesting(false);
-    }
-  };
-
+  // ── Categories ──
   const handleAddSubmit = (e) => {
     e.preventDefault();
     const trimmed = newCatInput.trim();
@@ -142,7 +240,6 @@ export default function SettingsView({
       setCatError('Category already exists');
       return;
     }
-
     setCatError('');
     onAddCategory(trimmed);
     setNewCatInput('');
@@ -154,6 +251,11 @@ export default function SettingsView({
 
   const totalFavorites = thoughts.filter((t) => t.favorite).length;
 
+  const showAll = activeTab === 'all';
+  const showAI = showAll || activeTab === 'ai';
+  const showCloud = showAll || activeTab === 'cloud';
+  const showAppearance = showAll || activeTab === 'appearance';
+
   return (
     <div className="settings-page">
       <div className="settings-header">
@@ -161,646 +263,889 @@ export default function SettingsView({
         <h2>Settings</h2>
       </div>
 
+      {/* ── Settings Navigation Filter Tabs ── */}
+      <div className="settings-tabs-nav" role="tablist" aria-label="Settings Categories">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'all'}
+          className={`settings-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveTab('all')}
+        >
+          <Sliders size={14} /> All Settings
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'ai'}
+          className={`settings-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ai')}
+        >
+          <Zap size={14} /> AI & Voice
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'cloud'}
+          className={`settings-tab-btn ${activeTab === 'cloud' ? 'active' : ''}`}
+          onClick={() => setActiveTab('cloud')}
+        >
+          <Cloud size={14} /> Cloud & Sync
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'appearance'}
+          className={`settings-tab-btn ${activeTab === 'appearance' ? 'active' : ''}`}
+          onClick={() => setActiveTab('appearance')}
+        >
+          <Sun size={14} /> Appearance & Categories
+        </button>
+      </div>
+
       <div className="settings-grid">
-        {/* ── Theme / Appearance ── */}
-        <section className="settings-card">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge">
-              {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
+        {/* ── Groq Whisper AI Configuration (Primary Urdu STT) ── */}
+        {showAI && (
+          <section className="settings-card groq-settings-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge groq-badge">
+                <Zap size={22} />
+              </div>
+              <div>
+                <h3>Groq Whisper AI (Urdu Voice-to-Urdu Text)</h3>
+                <p className="card-subtitle">
+                  High-speed speech-to-text directly in Persian-Arabic / Nastaʿlīq Urdu script &amp; bilingual code-switching via Groq LPUs
+                </p>
+              </div>
             </div>
-            <div>
-              <h3>Appearance</h3>
-              <p className="card-subtitle">Choose between light and dark visual themes</p>
-            </div>
-          </div>
 
-          <div className="theme-toggle-group" role="radiogroup" aria-label="Theme mode">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={theme === 'light'}
-              className={`theme-option-btn ${theme === 'light' ? 'active' : ''}`}
-              onClick={() => setTheme('light')}
-            >
-              <Sun size={18} />
-              <span>Light Mode</span>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={theme === 'dark'}
-              className={`theme-option-btn ${theme === 'dark' ? 'active' : ''}`}
-              onClick={() => setTheme('dark')}
-            >
-              <Moon size={18} />
-              <span>Dark Mode</span>
-            </button>
-          </div>
-        </section>
-
-        {/* ── Google Gemini AI Configuration ── */}
-        <section className="settings-card gemini-settings-card">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge gemini-badge">
-              <Sparkles size={20} />
-            </div>
-            <div>
-              <h3>Google Gemini AI (Studio Voice & Urdu Voice Typing)</h3>
-              <p className="card-subtitle">
-                Powers authentic heavy spiritual male voice generation (<code>gemini-3.8-flash-tts</code>) and real-time Urdu script typing
-              </p>
-            </div>
-          </div>
-
-          <div className="sync-status-row">
-            <span className="status-label">AI Voice Status:</span>
-            <span className={`status-pill ${geminiKeyInput.trim() ? 'connected' : ''}`}>
-              {geminiKeyInput.trim() ? '🟢 Active (Studio Voice & Urdu AI)' : '⚪ Not Configured'}
-            </span>
-          </div>
-
-          <form onSubmit={handleSaveGeminiKey} className="gemini-settings-form">
-            <label className="field">
-              <span className="field-label-row">
-                <span className="flex-inline"><Key size={14} /> Gemini API Key</span>
-                <a
-                  href="https://aistudio.google.com/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ai-studio-link"
-                >
-                  Get free key <ExternalLink size={12} />
-                </a>
+            <div className="sync-status-row">
+              <span className="status-label">Groq Whisper Status:</span>
+              <span className={`status-pill ${groqKeyInput.trim() ? 'connected' : ''}`}>
+                <span className={`status-dot ${groqKeyInput.trim() ? 'active' : ''}`} />
+                {groqKeyInput.trim() ? `Active (${groqModel})` : 'Not Configured'}
               </span>
-              <div className="gemini-input-group">
-                <input
-                  type="password"
-                  value={geminiKeyInput}
-                  onChange={(e) => {
-                    setGeminiKeyInput(e.target.value);
-                    setGeminiStatusMsg({ text: '', type: '' });
-                  }}
-                  placeholder="Paste your free Gemini API key (AIzaSy...)"
-                />
+            </div>
+
+            {/* Whisper Model Interactive Cards */}
+            <div className="field">
+              <div className="field-label-row">
+                <span className="flex-inline">
+                  <strong>Whisper Speech Model</strong>
+                </span>
+                <span className="field-hint">Select your preferred transcription engine</span>
+              </div>
+              <div className="groq-model-cards-grid" role="radiogroup" aria-label="Whisper model selection">
                 <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={isGeminiTesting}
+                  type="button"
+                  role="radio"
+                  aria-checked={groqModel === 'whisper-large-v3-turbo'}
+                  className={`groq-model-card ${groqModel === 'whisper-large-v3-turbo' ? 'active' : ''}`}
+                  onClick={() => handleSelectGroqModel('whisper-large-v3-turbo')}
                 >
-                  {isGeminiTesting ? 'Testing...' : 'Save & Connect'}
+                  <div className="model-card-header">
+                    <span className="model-name">
+                      <Zap size={14} /> whisper-large-v3-turbo
+                    </span>
+                    <span className="model-card-badge turbo">⚡ ~200ms Fast</span>
+                  </div>
+                  <p className="model-card-desc">
+                    Blistering-fast turnaround on Groq LPUs. Recommended for real-time dictation and thoughts.
+                  </p>
+                  {groqModel === 'whisper-large-v3-turbo' && (
+                    <div className="model-card-selected">
+                      <Check size={13} /> Selected
+                    </div>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={groqModel === 'whisper-large-v3'}
+                  className={`groq-model-card ${groqModel === 'whisper-large-v3' ? 'active' : ''}`}
+                  onClick={() => handleSelectGroqModel('whisper-large-v3')}
+                >
+                  <div className="model-card-header">
+                    <span className="model-name">whisper-large-v3</span>
+                    <span className="model-card-badge accuracy">🎯 Maximum Nuance</span>
+                  </div>
+                  <p className="model-card-desc">
+                    Full-sized OpenAI Whisper model. Provides deepest vocabulary accuracy for complex Urdu dialects.
+                  </p>
+                  {groqModel === 'whisper-large-v3' && (
+                    <div className="model-card-selected">
+                      <Check size={13} /> Selected
+                    </div>
+                  )}
                 </button>
               </div>
-            </label>
-
-            {geminiStatusMsg.text && (
-              <div className={`gemini-status-alert ${geminiStatusMsg.type}`}>
-                {geminiStatusMsg.type === 'success' && <Check size={14} />}
-                <span>{geminiStatusMsg.text}</span>
-              </div>
-            )}
-          </form>
-        </section>
-
-        {/* ── Groq Whisper AI Configuration ── */}
-        <section className="settings-card groq-settings-card">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge groq-badge">
-              <Zap size={20} />
             </div>
-            <div>
-              <h3>Groq Whisper AI (Urdu Voice-to-Urdu Text)</h3>
-              <p className="card-subtitle">
-                Powers real-time Urdu speech-to-text directly in Persian-Arabic / Nastaʿlīq script &amp; bilingual code-switching with OpenAI Whisper models on Groq LPUs
-              </p>
-            </div>
-          </div>
 
-          <div className="sync-status-row">
-            <span className="status-label">Groq Whisper Status:</span>
-            <span className={`status-pill ${groqKeyInput.trim() ? 'connected' : ''}`}>
-              {groqKeyInput.trim() ? `🟢 Active (${groqModel})` : '⚪ Not Configured'}
-            </span>
-          </div>
-
-          {/* Model selection */}
-          <div className="groq-model-selector-row">
-            <span className="field-label">Whisper Model:</span>
-            <div className="groq-model-pills" role="radiogroup">
-              <button
-                type="button"
-                className={`groq-model-pill ${groqModel === 'whisper-large-v3-turbo' ? 'active' : ''}`}
-                onClick={() => handleSelectGroqModel('whisper-large-v3-turbo')}
-              >
-                ⚡ whisper-large-v3-turbo (200ms Ultra-Fast)
-              </button>
-              <button
-                type="button"
-                className={`groq-model-pill ${groqModel === 'whisper-large-v3' ? 'active' : ''}`}
-                onClick={() => handleSelectGroqModel('whisper-large-v3')}
-              >
-                🎯 whisper-large-v3 (Maximum Nuance)
-              </button>
-            </div>
-          </div>
-
-          <form onSubmit={handleSaveGroqKey} className="gemini-settings-form">
-            <label className="field">
-              <span className="field-label-row">
-                <span className="flex-inline"><Key size={14} /> Groq API Key</span>
+            {/* Groq API Key Box */}
+            <div className="api-key-box">
+              <div className="api-key-label-row">
+                <span className="flex-inline">
+                  <Key size={14} /> <strong>Groq API Key</strong>
+                </span>
                 <a
                   href="https://console.groq.com/keys"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="ai-studio-link"
                 >
-                  Groq Console <ExternalLink size={12} />
+                  Get key on Groq Console <ExternalLink size={12} />
                 </a>
-              </span>
-              <div className="gemini-input-group">
+              </div>
+
+              <div className="api-key-input-wrapper">
+                <span className="key-icon-prefix">
+                  <Key size={15} />
+                </span>
                 <input
-                  type="password"
+                  type={showGroqKey ? 'text' : 'password'}
                   value={groqKeyInput}
                   onChange={(e) => {
                     setGroqKeyInput(e.target.value);
                     setGroqStatusMsg({ text: '', type: '' });
                   }}
                   placeholder="Paste your Groq API key (gsk_...)"
+                  className="api-key-input"
+                  autoComplete="off"
+                  spellCheck="false"
                 />
+
+                <div className="api-key-inline-actions">
+                  <button
+                    type="button"
+                    className="key-action-icon-btn"
+                    onClick={() => setShowGroqKey((v) => !v)}
+                    title={showGroqKey ? 'Hide key' : 'Show key'}
+                  >
+                    {showGroqKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`key-action-icon-btn ${groqCopied ? 'copied' : ''}`}
+                    onClick={handleCopyGroqKey}
+                    title="Copy key to clipboard"
+                    disabled={!groqKeyInput}
+                  >
+                    {groqCopied ? <Check size={15} className="copied-check" /> : <Copy size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="key-action-icon-btn"
+                    onClick={handlePasteGroqKey}
+                    title="Paste from clipboard"
+                  >
+                    <ClipboardPaste size={15} />
+                  </button>
+
+                  {groqKeyInput && (
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={() => {
+                        setGroqKeyInput('');
+                        setGroqStatusMsg({ text: '', type: '' });
+                      }}
+                      title="Clear field"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="api-key-actions-row">
+                <div className="primary-actions-left">
+                  <button
+                    type="button"
+                    className="primary-button save-key-btn"
+                    onClick={handleSaveOnlyGroqKey}
+                  >
+                    {groqSavedFeedback ? <Check size={15} /> : <Key size={15} />}
+                    <span>{groqSavedFeedback ? 'Key Saved Permanently!' : 'Save Key'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button test-key-btn"
+                    onClick={handleTestGroqKey}
+                    disabled={isGroqTesting || !groqKeyInput.trim()}
+                  >
+                    {isGroqTesting ? <Loader2 size={15} className="spin-icon" /> : <Zap size={15} />}
+                    <span>{isGroqTesting ? 'Testing connection...' : 'Test Connection'}</span>
+                  </button>
+                </div>
+
                 <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={isGroqTesting}
+                  type="button"
+                  className="action-link reset-key-link"
+                  onClick={handleResetGroqDefault}
+                  title="Restore default pre-configured key"
                 >
-                  {isGroqTesting ? 'Testing...' : 'Save & Connect'}
+                  <RotateCcw size={13} />
+                  <span>Reset to Default Key</span>
                 </button>
               </div>
-            </label>
 
-            {groqStatusMsg.text && (
-              <div className={`gemini-status-alert ${groqStatusMsg.type}`}>
-                {groqStatusMsg.type === 'success' && <Check size={14} />}
-                <span>{groqStatusMsg.text}</span>
+              <div className="api-security-note">
+                <span>🔒 Permanently stored in your browser's persistent localStorage. Private &amp; secure.</span>
               </div>
-            )}
-          </form>
-        </section>
+
+              {groqStatusMsg.text && (
+                <div className={`gemini-status-alert ${groqStatusMsg.type}`}>
+                  {groqStatusMsg.type === 'success' && <Check size={14} />}
+                  <span>{groqStatusMsg.text}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ── Google Gemini AI Configuration ── */}
+        {showAI && (
+          <section className="settings-card gemini-settings-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge gemini-badge">
+                <Sparkles size={22} />
+              </div>
+              <div>
+                <h3>Google Gemini AI (Studio Spiritual Male Voice)</h3>
+                <p className="card-subtitle">
+                  Powers studio-grade heavy spiritual male voice generation (<code>gemini-3.8-flash-tts</code>)
+                </p>
+              </div>
+            </div>
+
+            <div className="sync-status-row">
+              <span className="status-label">Gemini Voice Status:</span>
+              <span className={`status-pill ${geminiKeyInput.trim() ? 'connected' : ''}`}>
+                <span className={`status-dot ${geminiKeyInput.trim() ? 'active' : ''}`} />
+                {geminiKeyInput.trim() ? 'Active (Studio Voice)' : 'Not Configured'}
+              </span>
+            </div>
+
+            {/* Gemini API Key Box */}
+            <div className="api-key-box">
+              <div className="api-key-label-row">
+                <span className="flex-inline">
+                  <Key size={14} /> <strong>Gemini API Key</strong>
+                </span>
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ai-studio-link"
+                >
+                  Get free key on Google AI Studio <ExternalLink size={12} />
+                </a>
+              </div>
+
+              <div className="api-key-input-wrapper">
+                <span className="key-icon-prefix">
+                  <Key size={15} />
+                </span>
+                <input
+                  type={showGeminiKey ? 'text' : 'password'}
+                  value={geminiKeyInput}
+                  onChange={(e) => {
+                    setGeminiKeyInput(e.target.value);
+                    setGeminiStatusMsg({ text: '', type: '' });
+                  }}
+                  placeholder="Paste your Gemini API key (AIzaSy...)"
+                  className="api-key-input"
+                  autoComplete="off"
+                  spellCheck="false"
+                />
+
+                <div className="api-key-inline-actions">
+                  <button
+                    type="button"
+                    className="key-action-icon-btn"
+                    onClick={() => setShowGeminiKey((v) => !v)}
+                    title={showGeminiKey ? 'Hide key' : 'Show key'}
+                  >
+                    {showGeminiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`key-action-icon-btn ${geminiCopied ? 'copied' : ''}`}
+                    onClick={handleCopyGeminiKey}
+                    title="Copy key to clipboard"
+                    disabled={!geminiKeyInput}
+                  >
+                    {geminiCopied ? <Check size={15} className="copied-check" /> : <Copy size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="key-action-icon-btn"
+                    onClick={handlePasteGeminiKey}
+                    title="Paste from clipboard"
+                  >
+                    <ClipboardPaste size={15} />
+                  </button>
+
+                  {geminiKeyInput && (
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={() => {
+                        setGeminiKeyInput('');
+                        setGeminiStatusMsg({ text: '', type: '' });
+                      }}
+                      title="Clear field"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="api-key-actions-row">
+                <div className="primary-actions-left">
+                  <button
+                    type="button"
+                    className="primary-button save-key-btn"
+                    onClick={handleSaveOnlyGeminiKey}
+                  >
+                    {geminiSavedFeedback ? <Check size={15} /> : <Key size={15} />}
+                    <span>{geminiSavedFeedback ? 'Key Saved Permanently!' : 'Save Key'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button test-key-btn"
+                    onClick={handleTestGeminiKey}
+                    disabled={isGeminiTesting || !geminiKeyInput.trim()}
+                  >
+                    {isGeminiTesting ? <Loader2 size={15} className="spin-icon" /> : <Sparkles size={15} />}
+                    <span>{isGeminiTesting ? 'Testing connection...' : 'Test Connection'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="api-security-note">
+                <span>🔒 Stored safely in persistent browser localStorage.</span>
+              </div>
+
+              {geminiStatusMsg.text && (
+                <div className={`gemini-status-alert ${geminiStatusMsg.type}`}>
+                  {geminiStatusMsg.type === 'success' && <Check size={14} />}
+                  <span>{geminiStatusMsg.text}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* ── Audio Playback Speed & Pitch Settings ── */}
-        <section className="settings-card full-width audio-settings-card">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge audio-badge">
-              <Volume2 size={20} />
+        {showAI && (
+          <section className="settings-card full-width audio-settings-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge audio-badge">
+                <Volume2 size={22} />
+              </div>
+              <div>
+                <h3>Audio Playback &amp; Voice Controls</h3>
+                <p className="card-subtitle">
+                  Configure voice playback speed, voice pitch, and default voice engine (Existing is default)
+                </p>
+              </div>
             </div>
-            <div>
-              <h3>Audio Playback &amp; Voice Settings</h3>
-              <p className="card-subtitle">
-                Configure voice playback speed, voice pitch, and default voice engine (Existing is default)
-              </p>
-            </div>
-          </div>
 
-          {/* Voice Engine Toggle */}
-          <div className="audio-setting-block">
-            <div className="audio-setting-header">
-              <span className="audio-setting-title">Voice Engine:</span>
-              <span className="audio-setting-current-val">
-                {voiceEngine === 'gemini' ? 'Google Gemini AI (Studio Spiritual Voice)' : 'Offline Browser Voice'}
-              </span>
-            </div>
-            <div className="voice-engine-toggle-group" role="radiogroup" aria-label="Voice Engine">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={voiceEngine === 'gemini'}
-                className={`voice-engine-option-btn ${voiceEngine === 'gemini' ? 'active' : ''}`}
-                onClick={() => setVoiceEngine && setVoiceEngine('gemini')}
-              >
-                <div className="engine-option-main">
-                  <span className="flex-inline"><Sparkles size={14} /> <strong>Google Gemini AI Voice</strong></span>
-                  <span className="badge-default">SPIRITUAL MALE</span>
-                </div>
-                <span className="engine-option-desc">
-                  Authentic deep spiritual male baritone (Charon). Perfect native Urdu pronunciation and English dictation.
+            {/* Voice Engine Toggle */}
+            <div className="audio-setting-block">
+              <div className="audio-setting-header">
+                <span className="audio-setting-title">Voice Engine:</span>
+                <span className="audio-setting-current-val">
+                  {voiceEngine === 'existing' ? 'Browser Web Speech (Default)' : 'Gemini Studio Spiritual Voice'}
                 </span>
-              </button>
-
-              <button
-                type="button"
-                role="radio"
-                aria-checked={voiceEngine === 'existing'}
-                className={`voice-engine-option-btn ${voiceEngine === 'existing' ? 'active' : ''}`}
-                onClick={() => setVoiceEngine && setVoiceEngine('existing')}
-              >
-                <div className="engine-option-main">
-                  <strong>Browser Speech Voice</strong>
-                  <span className="badge-key-needed">OFFLINE ONLY</span>
-                </div>
-                <span className="engine-option-desc">
-                  Standard device speech synthesis for offline use without internet connection.
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Audio Playback Speed (Rate) */}
-          <div className="audio-setting-block">
-            <div className="audio-setting-header">
-              <label htmlFor="audio-speed-slider" className="audio-setting-title">
-                Play Audio Speed:
-              </label>
-              <span className="audio-setting-current-val">
-                <strong>{Number(ttsRate).toFixed(2)}x</strong>
-                <span className="audio-hint-tag">
-                  {ttsRate < 0.8 ? 'Slow / Meditative' : ttsRate <= 0.9 ? 'Calm (Default)' : ttsRate <= 1.1 ? 'Normal' : 'Fast'}
-                </span>
-              </span>
-            </div>
-
-            <div className="slider-control-row">
-              <span className="slider-bound">0.50x</span>
-              <input
-                id="audio-speed-slider"
-                type="range"
-                min="0.5"
-                max="2.0"
-                step="0.05"
-                value={ttsRate}
-                onChange={(e) => setTtsRate && setTtsRate(parseFloat(e.target.value))}
-                className="audio-range-slider"
-                aria-label="Playback speed"
-              />
-              <span className="slider-bound">2.00x</span>
-            </div>
-
-            <div className="audio-presets-row">
-              <span className="presets-label">Speed Presets:</span>
-              {[
-                { label: '0.75x Calm', val: 0.75 },
-                { label: '0.85x Default', val: 0.85 },
-                { label: '1.00x Normal', val: 1.0 },
-                { label: '1.25x Brisk', val: 1.25 },
-                { label: '1.50x Fast', val: 1.5 },
-              ].map((p) => (
-                <button
-                  key={p.val}
-                  type="button"
-                  className={`audio-preset-btn ${Math.abs(ttsRate - p.val) < 0.02 ? 'active' : ''}`}
-                  onClick={() => setTtsRate && setTtsRate(p.val)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Audio Playback Pitch */}
-          <div className="audio-setting-block">
-            <div className="audio-setting-header">
-              <label htmlFor="audio-pitch-slider" className="audio-setting-title">
-                Play Audio Pitch:
-              </label>
-              <span className="audio-setting-current-val">
-                <strong>{Number(ttsPitch).toFixed(2)}</strong>
-                <span className="audio-hint-tag">
-                  {ttsPitch <= 0.72 ? 'Deep Spiritual (Default)' : ttsPitch <= 0.9 ? 'Warm Baritone' : ttsPitch <= 1.1 ? 'Standard' : 'High Pitch'}
-                </span>
-              </span>
-            </div>
-
-            <div className="slider-control-row">
-              <span className="slider-bound">0.50 (Deep)</span>
-              <input
-                id="audio-pitch-slider"
-                type="range"
-                min="0.5"
-                max="1.5"
-                step="0.02"
-                value={ttsPitch}
-                onChange={(e) => setTtsPitch && setTtsPitch(parseFloat(e.target.value))}
-                className="audio-range-slider"
-                aria-label="Voice pitch"
-              />
-              <span className="slider-bound">1.50 (High)</span>
-            </div>
-
-            <div className="audio-presets-row">
-              <span className="presets-label">Pitch Presets:</span>
-              {[
-                { label: '0.68 Deep (Default)', val: 0.68 },
-                { label: '0.82 Warm', val: 0.82 },
-                { label: '1.00 Standard', val: 1.0 },
-                { label: '1.20 Light', val: 1.2 },
-              ].map((p) => (
-                <button
-                  key={p.val}
-                  type="button"
-                  className={`audio-preset-btn ${Math.abs(ttsPitch - p.val) < 0.02 ? 'active' : ''}`}
-                  onClick={() => setTtsPitch && setTtsPitch(p.val)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Test Listen Buttons & Reset */}
-          <div className="audio-actions-row">
-            <div className="audio-test-buttons">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  if (isSpeaking) {
-                    onStopTTS?.();
-                  } else {
-                    onTestSpeak?.(
-                      'Peace be upon you. This is a sample of your selected voice speed and pitch settings.',
-                      'en-US'
-                    );
-                  }
-                }}
-              >
-                {isSpeaking ? <Square size={15} /> : <Play size={15} />}
-                <span>{isSpeaking ? 'Stop Test' : 'Test English Audio'}</span>
-              </button>
-
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  if (isSpeaking) {
-                    onStopTTS?.();
-                  } else {
-                    onTestSpeak?.(
-                      'السلام علیکم۔ یہ آپ کی منتخب کردہ آواز کی رفتار اور پچ کا نمونہ ہے۔',
-                      'ur-PK'
-                    );
-                  }
-                }}
-              >
-                {isSpeaking ? <Square size={15} /> : <Play size={15} />}
-                <span>{isSpeaking ? 'Stop Test' : 'Test Urdu Audio'}</span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              className="action-link reset-defaults-btn"
-              onClick={handleResetDefaults}
-              title="Reset speed to 0.85x, pitch to 0.68, and engine to Existing"
-            >
-              <RotateCcw size={14} />
-              <span>{resetFeedback ? '✓ Reset to Existing Defaults' : 'Reset to Existing Defaults'}</span>
-            </button>
-          </div>
-        </section>
-
-        {/* ── Google Drive & Memory Sync ── */}
-        <section className="settings-card">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge">
-              <CloudLightning size={20} />
-            </div>
-            <div>
-              <h3>Cloud & Google Drive Backup</h3>
-              <p className="card-subtitle">Sync to Google Drive and refresh notebook state</p>
-            </div>
-          </div>
-
-          <div className="sync-status-row">
-            <span className="status-label">Current Status:</span>
-            <span className="status-pill">
-              {isSyncing && <RotateCw size={13} className="spin" />}
-              {status}
-            </span>
-          </div>
-
-          <div className="sync-actions-row">
-            <button
-              type="button"
-              className="primary-button refresh-button"
-              onClick={handleRefreshMemory}
-              disabled={isSyncing}
-            >
-              <RotateCw size={16} className={isSyncing ? 'spin' : ''} />
-              Refresh Memory
-            </button>
-
-            {token ? (
-              <button type="button" className="secondary-button" onClick={handleLogout}>
-                <LogOut size={16} /> Disconnect Drive
-              </button>
-            ) : (
-              <>
-                <button type="button" className="secondary-button" onClick={() => handleLogin()}>
-                  Connect Google Drive
-                </button>
+              </div>
+              <div className="voice-engine-picker" role="radiogroup" aria-label="Default voice engine">
                 <button
                   type="button"
-                  className="action-link"
-                  onClick={() => setShowManualToken(!showManualToken)}
-                  title="Manual Access Token paste"
+                  className={`voice-engine-btn ${voiceEngine === 'existing' ? 'active' : ''}`}
+                  onClick={() => setVoiceEngine && setVoiceEngine('existing')}
                 >
-                  <Key size={15} /> Paste Token
+                  <span className="engine-title">
+                    <Volume2 size={16} /> Existing Voice Engine (Default)
+                  </span>
+                  <span className="engine-desc">
+                    Fast, offline-compatible browser voice tuned with deep baritone acoustics.
+                  </span>
                 </button>
-              </>
-            )}
 
-            <button
-              type="button"
-              className="action-link"
-              onClick={() => setShowOAuthHelp(!showOAuthHelp)}
-              title="Google OAuth 2.0 configuration details"
-            >
-              <HelpCircle size={15} /> APK OAuth Info
-            </button>
-          </div>
+                <button
+                  type="button"
+                  className={`voice-engine-btn ${voiceEngine === 'gemini' ? 'active' : ''}`}
+                  onClick={() => setVoiceEngine && setVoiceEngine('gemini')}
+                >
+                  <span className="engine-title">
+                    <Sparkles size={16} /> Gemini Studio Voice (AI)
+                  </span>
+                  <span className="engine-desc">
+                    Ultra-realistic spiritual male voice generated by Gemini 3.8 Flash TTS. Requires API key.
+                  </span>
+                </button>
+              </div>
+            </div>
 
-          {showManualToken && !token && (
-            <div className="oauth-help-box" style={{ marginTop: '0.75rem' }}>
-              <h4>Manual OAuth Access Token</h4>
-              <p style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
-                If you have an OAuth 2.0 token (from OAuth Playground or gcloud), you can paste it directly below:
-              </p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {/* Audio Playback Speed (Rate) */}
+            <div className="audio-setting-block">
+              <div className="audio-setting-header">
+                <label htmlFor="audio-speed-slider" className="audio-setting-title">
+                  Play Audio Speed:
+                </label>
+                <span className="audio-setting-current-val">
+                  <strong>{Number(ttsRate).toFixed(2)}x</strong>
+                  <span className="audio-hint-tag">
+                    {ttsRate < 0.8 ? 'Slow / Meditative' : ttsRate <= 0.9 ? 'Calm (Default)' : ttsRate <= 1.1 ? 'Normal' : 'Fast'}
+                  </span>
+                </span>
+              </div>
+
+              <div className="slider-control-row">
+                <span className="slider-bound">0.50x</span>
                 <input
-                  type="text"
-                  placeholder="ya29.a0..."
-                  value={manualTokenInput}
-                  onChange={(e) => setManualTokenInput(e.target.value)}
-                  style={{
-                    flex: '1',
-                    minWidth: '200px',
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.85rem',
-                  }}
+                  id="audio-speed-slider"
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.05"
+                  value={ttsRate}
+                  onChange={(e) => setTtsRate && setTtsRate(parseFloat(e.target.value))}
+                  className="audio-range-slider"
+                  aria-label="Playback speed"
                 />
+                <span className="slider-bound">2.00x</span>
+              </div>
+
+              <div className="audio-presets-row">
+                <span className="presets-label">Speed Presets:</span>
+                {[
+                  { label: '0.75x Calm', val: 0.75 },
+                  { label: '0.85x Default', val: 0.85 },
+                  { label: '1.00x Normal', val: 1.0 },
+                  { label: '1.25x Brisk', val: 1.25 },
+                  { label: '1.50x Fast', val: 1.5 },
+                ].map((p) => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    className={`audio-preset-btn ${Math.abs(ttsRate - p.val) < 0.02 ? 'active' : ''}`}
+                    onClick={() => setTtsRate && setTtsRate(p.val)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Audio Playback Pitch */}
+            <div className="audio-setting-block">
+              <div className="audio-setting-header">
+                <label htmlFor="audio-pitch-slider" className="audio-setting-title">
+                  Play Audio Pitch:
+                </label>
+                <span className="audio-setting-current-val">
+                  <strong>{Number(ttsPitch).toFixed(2)}</strong>
+                  <span className="audio-hint-tag">
+                    {ttsPitch <= 0.72 ? 'Deep Spiritual (Default)' : ttsPitch <= 0.9 ? 'Warm Baritone' : ttsPitch <= 1.1 ? 'Standard' : 'High Pitch'}
+                  </span>
+                </span>
+              </div>
+
+              <div className="slider-control-row">
+                <span className="slider-bound">0.50 (Deep)</span>
+                <input
+                  id="audio-pitch-slider"
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.02"
+                  value={ttsPitch}
+                  onChange={(e) => setTtsPitch && setTtsPitch(parseFloat(e.target.value))}
+                  className="audio-range-slider"
+                  aria-label="Voice pitch"
+                />
+                <span className="slider-bound">1.50 (High)</span>
+              </div>
+
+              <div className="audio-presets-row">
+                <span className="presets-label">Pitch Presets:</span>
+                {[
+                  { label: '0.68 Deep (Default)', val: 0.68 },
+                  { label: '0.82 Warm', val: 0.82 },
+                  { label: '1.00 Standard', val: 1.0 },
+                  { label: '1.20 Light', val: 1.2 },
+                ].map((p) => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    className={`audio-preset-btn ${Math.abs(ttsPitch - p.val) < 0.02 ? 'active' : ''}`}
+                    onClick={() => setTtsPitch && setTtsPitch(p.val)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Test Listen Buttons & Reset */}
+            <div className="audio-actions-row">
+              <div className="audio-test-buttons">
                 <button
                   type="button"
-                  className="primary-button"
-                  style={{ padding: '0.5rem 1rem' }}
+                  className="secondary-button"
                   onClick={() => {
-                    if (onManualToken && onManualToken(manualTokenInput)) {
-                      setShowManualToken(false);
-                      setManualTokenInput('');
+                    if (isSpeaking) {
+                      onStopTTS?.();
+                    } else {
+                      onTestSpeak?.(
+                        'Peace be upon you. This is a sample of your selected voice speed and pitch settings.',
+                        'en-US'
+                      );
                     }
                   }}
                 >
-                  Apply Token
+                  {isSpeaking ? <Square size={15} /> : <Play size={15} />}
+                  <span>{isSpeaking ? 'Stop Test' : 'Test English Audio'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    if (isSpeaking) {
+                      onStopTTS?.();
+                    } else {
+                      onTestSpeak?.(
+                        'السلام علیکم۔ یہ آپ کی منتخب کردہ آواز کی رفتار اور پچ کا نمونہ ہے۔',
+                        'ur-PK'
+                      );
+                    }
+                  }}
+                >
+                  {isSpeaking ? <Square size={15} /> : <Play size={15} />}
+                  <span>{isSpeaking ? 'Stop Test' : 'Test Urdu Audio'}</span>
                 </button>
               </div>
-            </div>
-          )}
 
-          {showOAuthHelp && (
-            <div className="oauth-help-box">
-              <h4>Google OAuth 2.0 Setup Details</h4>
-              <p>
-                <strong>1. In-App Direct Login (Default):</strong><br />
-                Tapping <em>&quot;Connect Google Drive&quot;</em> opens the Google Sign-in dialog directly inside the app with a sanitized User-Agent. It uses in-app messaging and does <strong>not</strong> require redirect URIs.
-              </p>
-              <p style={{ marginTop: '0.5rem' }}>
-                <strong>2. If using External Browser / Chrome Custom Tab:</strong><br />
-                If you encounter <code>Error 400: redirect_uri_mismatch</code>, go to{' '}
-                <em>Google Cloud Console &gt; APIs &amp; Services &gt; Credentials</em>, select your Web Client ID, and add this exact URI to <strong>Authorized redirect URIs</strong>:
-                <br />
-                <code>https://kaiserabbas.github.io/thought-organizer/</code>
-              </p>
-              <p style={{ marginTop: '0.5rem' }}>
-                <strong>3. Native Android Client ID (Optional):</strong>
-              </p>
-              <ul>
-                <li>
-                  <strong>Package Name:</strong> <code>com.kaiserabbas.thoughtorganizer</code>
-                </li>
-                <li>
-                  <strong>SHA-1 Fingerprint:</strong>{' '}
-                  <code>33:9E:8C:73:EC:2E:85:22:11:3E:F5:84:CA:DD:60:E9:14:95:36:C7</code>
-                </li>
-              </ul>
-            </div>
-          )}
-
-          <div className="sync-stats-box">
-            <div className="sync-stat">
-              <Database size={15} />
-              <span>{thoughts.length} total saved</span>
-            </div>
-            <div className="sync-stat">
-              <Heart size={15} />
-              <span>{totalFavorites} favorites backed up</span>
-            </div>
-            <div className="sync-stat">
-              <Tag size={15} />
-              <span>{categories.length} categories</span>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Offline Local Backup (Export / Import JSON) ── */}
-        <section className="settings-card full-width">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge">
-              <Key size={20} />
-            </div>
-            <div>
-              <h3>Local Backup &amp; Restore (Offline-Safe)</h3>
-              <p className="card-subtitle">Export or import all your thoughts and categories directly as a JSON file</p>
-            </div>
-          </div>
-
-          <div className="backup-actions-row">
-            <button type="button" className="secondary-button" onClick={onExportBackup}>
-              <Download size={16} /> Export JSON Backup
-            </button>
-
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload size={16} /> Restore from JSON Backup
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={onImportBackup}
-              accept=".json,application/json"
-              style={{ display: 'none' }}
-            />
-          </div>
-        </section>
-
-        {/* ── Category Management (Addition & Deletion) ── */}
-        <section className="settings-card full-width">
-          <div className="card-section-heading">
-            <div className="settings-icon-badge">
-              <Tag size={20} />
-            </div>
-            <div>
-              <h3>Category Management</h3>
-              <p className="card-subtitle">Add new categories or delete existing ones</p>
-            </div>
-          </div>
-
-          {/* Add Category Form */}
-          <form className="add-category-form" onSubmit={handleAddSubmit}>
-            <div className="input-with-button">
-              <input
-                type="text"
-                value={newCatInput}
-                onChange={(e) => {
-                  setNewCatInput(e.target.value);
-                  if (catError) setCatError('');
-                }}
-                placeholder="Enter new category name..."
-                dir="auto"
-              />
-              <button type="submit" className="primary-button">
-                <Plus size={16} /> Add Category
+              <button
+                type="button"
+                className="action-link reset-defaults-btn"
+                onClick={handleResetDefaults}
+                title="Reset speed to 0.85x, pitch to 0.68, and engine to Existing"
+              >
+                <RotateCcw size={14} />
+                <span>{resetFeedback ? '✓ Reset to Existing Defaults' : 'Reset to Existing Defaults'}</span>
               </button>
             </div>
-            {catError && <p className="field-error-msg">{catError}</p>}
-          </form>
+          </section>
+        )}
 
-          {/* Existing Categories List */}
-          <div className="categories-manage-list">
-            <h4>Existing Categories ({categories.length})</h4>
-            <div className="category-manage-items">
-              {categories.map((cat) => {
-                const count = getCategoryCount(cat);
-                const isOnlyOne = categories.length <= 1;
-                return (
-                  <div key={cat} className="category-manage-item">
-                    <div className="category-info">
-                      <Tag size={15} />
-                      <strong className="category-name">{cat}</strong>
-                      <span className="category-post-count">
-                        {count} {count === 1 ? 'thought' : 'thoughts'}
-                      </span>
-                    </div>
+        {/* ── Theme / Appearance ── */}
+        {showAppearance && (
+          <section className="settings-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge">
+                {theme === 'dark' ? <Moon size={22} /> : <Sun size={22} />}
+              </div>
+              <div>
+                <h3>Appearance</h3>
+                <p className="card-subtitle">Choose between light and dark visual themes</p>
+              </div>
+            </div>
+
+            <div className="theme-toggle-group" role="radiogroup" aria-label="Theme mode">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === 'light'}
+                className={`theme-option-btn ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => setTheme('light')}
+              >
+                <Sun size={18} />
+                <span>Light Mode</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === 'dark'}
+                className={`theme-option-btn ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => setTheme('dark')}
+              >
+                <Moon size={18} />
+                <span>Dark Mode</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ── Google Drive & Memory Sync ── */}
+        {showCloud && (
+          <section className="settings-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge">
+                <CloudLightning size={22} />
+              </div>
+              <div>
+                <h3>Cloud & Google Drive Backup</h3>
+                <p className="card-subtitle">Sync thoughts to Google Drive and refresh memory state</p>
+              </div>
+            </div>
+
+            <div className="sync-status-row">
+              <span className="status-label">Current Status:</span>
+              <span className="status-pill">
+                {isSyncing && <RotateCw size={13} className="spin" />}
+                {status}
+              </span>
+            </div>
+
+            <div className="sync-actions-row">
+              <button
+                type="button"
+                className="primary-button refresh-button"
+                onClick={handleRefreshMemory}
+                disabled={isSyncing}
+              >
+                <RotateCw size={16} className={isSyncing ? 'spin' : ''} />
+                Refresh Memory
+              </button>
+
+              {token ? (
+                <button type="button" className="secondary-button" onClick={handleLogout}>
+                  <LogOut size={16} /> Disconnect Drive
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="secondary-button" onClick={() => handleLogin()}>
+                    Connect Google Drive
+                  </button>
+                  <button
+                    type="button"
+                    className="action-link"
+                    onClick={() => setShowManualToken(!showManualToken)}
+                    title="Manual Access Token paste"
+                  >
+                    <Key size={15} /> Paste Token
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                className="action-link"
+                onClick={() => setShowOAuthHelp(!showOAuthHelp)}
+                title="Google OAuth 2.0 configuration details"
+              >
+                <HelpCircle size={15} /> APK OAuth Info
+              </button>
+            </div>
+
+            {showManualToken && !token && (
+              <div className="oauth-help-box" style={{ marginTop: '0.75rem' }}>
+                <h4>Manual OAuth Access Token</h4>
+                <p style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+                  If you have an OAuth 2.0 token (from OAuth Playground or gcloud), paste it directly below:
+                </p>
+                <div className="api-key-input-wrapper">
+                  <input
+                    type={showManualTokenSecret ? 'text' : 'password'}
+                    placeholder="ya29.a0..."
+                    value={manualTokenInput}
+                    onChange={(e) => setManualTokenInput(e.target.value)}
+                    className="api-key-input"
+                  />
+                  <div className="api-key-inline-actions">
                     <button
                       type="button"
-                      className="category-delete-action-btn"
-                      onClick={() => onRequestDeleteCategory(cat, count)}
-                      disabled={isOnlyOne}
-                      title={isOnlyOne ? 'At least one category is required' : `Delete category ${cat}`}
+                      className="key-action-icon-btn"
+                      onClick={() => setShowManualTokenSecret((v) => !v)}
+                      title={showManualTokenSecret ? 'Hide token' : 'Show token'}
                     >
-                      <Trash2 size={15} /> Delete
+                      {showManualTokenSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={async () => {
+                        const text = await navigator.clipboard?.readText();
+                        if (text) setManualTokenInput(text.trim());
+                      }}
+                      title="Paste from clipboard"
+                    >
+                      <ClipboardPaste size={15} />
                     </button>
                   </div>
-                );
-              })}
+                </div>
+
+                <div style={{ marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    style={{ padding: '0.5rem 1rem' }}
+                    onClick={() => {
+                      if (onManualToken && onManualToken(manualTokenInput)) {
+                        setShowManualToken(false);
+                        setManualTokenInput('');
+                      }
+                    }}
+                  >
+                    Apply Token
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showOAuthHelp && (
+              <div className="oauth-help-box">
+                <h4>Google OAuth 2.0 Setup Details</h4>
+                <p>
+                  <strong>1. In-App Direct Login (Default):</strong><br />
+                  Tapping <em>&quot;Connect Google Drive&quot;</em> opens the Google Sign-in dialog directly inside the app with a sanitized User-Agent. It uses in-app messaging and does <strong>not</strong> require redirect URIs.
+                </p>
+                <p style={{ marginTop: '0.5rem' }}>
+                  <strong>2. If using External Browser / Chrome Custom Tab:</strong><br />
+                  If you encounter <code>Error 400: redirect_uri_mismatch</code>, go to{' '}
+                  <em>Google Cloud Console &gt; APIs &amp; Services &gt; Credentials</em>, select your Web Client ID, and add this exact URI to <strong>Authorized redirect URIs</strong>:
+                  <br />
+                  <code>https://kaiserabbas.github.io/thought-organizer/</code>
+                </p>
+              </div>
+            )}
+
+            <div className="sync-stats-box">
+              <div className="sync-stat">
+                <Database size={15} />
+                <span>{thoughts.length} total saved</span>
+              </div>
+              <div className="sync-stat">
+                <Heart size={15} />
+                <span>{totalFavorites} favorites backed up</span>
+              </div>
+              <div className="sync-stat">
+                <Tag size={15} />
+                <span>{categories.length} categories</span>
+              </div>
             </div>
-            <p className="category-info-note">
-              Note: Deleting a category moves its thoughts to the default category so your thoughts are never lost. Before deleting, a confirmation will appear.
-            </p>
-          </div>
-        </section>
+          </section>
+        )}
+
+        {/* ── Offline Local Backup (Export / Import JSON) ── */}
+        {showCloud && (
+          <section className="settings-card full-width">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge">
+                <Download size={22} />
+              </div>
+              <div>
+                <h3>Local Backup &amp; Restore (Offline-Safe)</h3>
+                <p className="card-subtitle">Export or import all your thoughts and categories directly as a JSON file</p>
+              </div>
+            </div>
+
+            <div className="backup-actions-row">
+              <button type="button" className="secondary-button" onClick={onExportBackup}>
+                <Download size={16} /> Export JSON Backup
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={16} /> Restore from JSON Backup
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={onImportBackup}
+                accept=".json,application/json"
+                style={{ display: 'none' }}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* ── Category Management (Addition & Deletion) ── */}
+        {showAppearance && (
+          <section className="settings-card full-width">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge">
+                <Tag size={22} />
+              </div>
+              <div>
+                <h3>Category Management</h3>
+                <p className="card-subtitle">Add new categories or delete existing ones</p>
+              </div>
+            </div>
+
+            {/* Add Category Form */}
+            <form className="add-category-form" onSubmit={handleAddSubmit}>
+              <div className="input-with-button">
+                <input
+                  type="text"
+                  value={newCatInput}
+                  onChange={(e) => {
+                    setNewCatInput(e.target.value);
+                    if (catError) setCatError('');
+                  }}
+                  placeholder="Enter new category name..."
+                  dir="auto"
+                />
+                <button type="submit" className="primary-button">
+                  <Plus size={16} /> Add Category
+                </button>
+              </div>
+              {catError && <p className="field-error-msg">{catError}</p>}
+            </form>
+
+            {/* Existing Categories List */}
+            <div className="categories-manage-list">
+              <h4>Existing Categories ({categories.length})</h4>
+              <div className="category-manage-items">
+                {categories.map((cat) => {
+                  const count = getCategoryCount(cat);
+                  const isOnlyOne = categories.length <= 1;
+                  return (
+                    <div key={cat} className="category-manage-item">
+                      <div className="category-info">
+                        <Tag size={15} />
+                        <strong className="category-name">{cat}</strong>
+                        <span className="category-post-count">
+                          {count} {count === 1 ? 'thought' : 'thoughts'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="category-delete-action-btn"
+                        onClick={() => onRequestDeleteCategory(cat, count)}
+                        disabled={isOnlyOne}
+                        title={isOnlyOne ? 'At least one category is required' : `Delete category ${cat}`}
+                      >
+                        <Trash2 size={15} /> Delete
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="category-info-note">
+                Note: Deleting a category moves its thoughts to the default category so your thoughts are never lost. Before deleting, a confirmation will appear.
+              </p>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

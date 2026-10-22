@@ -46,6 +46,7 @@ export async function testGeminiApiKey(keyToTest) {
   const apiKey = keyToTest || getGeminiApiKey();
   if (!apiKey) throw new Error('API key is empty');
 
+  const start = Date.now();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
   const res = await fetch(url, {
     method: 'POST',
@@ -61,7 +62,8 @@ export async function testGeminiApiKey(keyToTest) {
     throw new Error(errorData?.error?.message || `HTTP error ${res.status}`);
   }
 
-  return true;
+  const latency = Date.now() - start;
+  return { success: true, latency };
 }
 
 /**

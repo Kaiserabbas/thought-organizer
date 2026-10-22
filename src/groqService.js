@@ -92,6 +92,7 @@ export async function testGroqApiKey(keyToTest) {
   const apiKey = (keyToTest || getGroqApiKey()).trim();
   if (!apiKey) throw new Error('Groq API Key is empty');
 
+  const start = Date.now();
   const res = await fetch('https://api.groq.com/openai/v1/models', {
     method: 'GET',
     headers: {
@@ -104,6 +105,7 @@ export async function testGroqApiKey(keyToTest) {
     throw new Error(errData?.error?.message || `Groq API returned HTTP ${res.status}`);
   }
 
+  const latency = Date.now() - start;
   const data = await res.json();
   const models = (data?.data || []).map((m) => m.id);
   const hasWhisper = models.some((id) => id.includes('whisper'));
@@ -111,6 +113,7 @@ export async function testGroqApiKey(keyToTest) {
     success: true,
     hasWhisper,
     models,
+    latency,
   };
 }
 
