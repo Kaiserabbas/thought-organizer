@@ -20,7 +20,7 @@ export async function generateSpiritualVoiceAudio(text, options = {}) {
     throw new Error('No text provided for audio export');
   }
 
-  const { engine = 'auto', lang, voice, rate = 0.85, pitch = 0.68 } = options;
+  const { engine = 'azure', lang, voice, rate = 0.85, pitch = 0.68 } = options;
 
   // 1. Try Azure Neural Voice if explicitly requested or auto-selected
   if (engine === 'azure' || (engine === 'auto' && hasAzureSpeechKey())) {

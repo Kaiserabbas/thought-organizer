@@ -321,7 +321,11 @@ export default function App() {
     return saved ? parseFloat(saved) : 0.68;
   });
   const [voiceEngine, setVoiceEngine] = useState(() => {
-    return localStorage.getItem('tts_voice_engine') || 'gemini';
+    const saved = localStorage.getItem('tts_voice_engine');
+    if (!saved || saved === 'existing') {
+      return 'azure';
+    }
+    return saved;
   });
   const [ttsLang, setTtsLang] = useState('en-US');
   const [activeSpeakingThoughtId, setActiveSpeakingThoughtId] = useState(null);
@@ -1396,7 +1400,7 @@ export default function App() {
                           },
                         });
                       }}
-                      title={voiceEngine === 'gemini' ? 'Listen to draft in Gemini studio voice' : 'Listen to draft in voice'}
+                      title={voiceEngine === 'azure' ? 'Listen to draft in Azure Neural Voice (Default)' : voiceEngine === 'gemini' ? 'Listen to draft in Gemini studio voice' : 'Listen to draft in voice'}
                     >
                       {isLoadingAudio && activeSpeakingThoughtId === 'draft' ? (
                         <Loader2 size={14} className="spin-icon" />

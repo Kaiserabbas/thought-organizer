@@ -277,7 +277,7 @@ export function useTTS() {
 
       const effectiveEngine =
         engine ||
-        (useAzure ? 'azure' : useGemini ? 'gemini' : 'existing');
+        (useAzure ? 'azure' : useGemini ? 'gemini' : (hasAzureSpeechKey() ? 'azure' : 'existing'));
 
       // ── Option A: Microsoft Azure Neural Voice (ur-PK-AsadNeural / en-US-GuyNeural) ──
       if (effectiveEngine === 'azure' && hasAzureSpeechKey()) {

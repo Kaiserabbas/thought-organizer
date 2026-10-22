@@ -42,7 +42,7 @@ export default function VoicePanel({
   setLang,
   ttsRate = 0.85,
   ttsPitch = 0.68,
-  voiceEngine = 'existing',
+  voiceEngine = 'azure',
   onRequireGeminiKey,
 }) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
