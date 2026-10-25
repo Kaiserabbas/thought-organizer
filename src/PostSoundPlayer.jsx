@@ -369,19 +369,6 @@ export default function PostSoundPlayer({
 
       {/* Main Controls Row */}
       <div className="soundplayer-controls-row">
-        {/* Left: Skip back 5s */}
-        <button
-          type="button"
-          className="soundplayer-ctrl-btn sec-btn"
-          onClick={() => handleSkipSeconds(-5)}
-          disabled={!duration || currentTime <= 0}
-          title="Rewind 5 seconds"
-          aria-label="Rewind 5 seconds"
-        >
-          <RotateCcw size={15} />
-          <span className="btn-label-sub">5s</span>
-        </button>
-
         {/* Center: Play / Pause Big Button */}
         <button
           type="button"
@@ -403,61 +390,77 @@ export default function PostSoundPlayer({
           </span>
         </button>
 
-        {/* Skip forward 5s */}
-        <button
-          type="button"
-          className="soundplayer-ctrl-btn sec-btn"
-          onClick={() => handleSkipSeconds(5)}
-          disabled={!duration || currentTime >= duration}
-          title="Forward 5 seconds"
-          aria-label="Forward 5 seconds"
-        >
-          <RotateCw size={15} />
-          <span className="btn-label-sub">5s</span>
-        </button>
-
-        {/* Stop button (visible while playing or paused mid-track) */}
-        {(isPlaying || currentTime > 0) && (
+        {/* Secondary Controls Group */}
+        <div className="soundplayer-secondary-row">
+          {/* Left: Skip back 5s */}
           <button
             type="button"
             className="soundplayer-ctrl-btn sec-btn"
-            onClick={handleStop}
-            title="Stop and reset to start"
-            aria-label="Stop playback"
+            onClick={() => handleSkipSeconds(-5)}
+            disabled={!duration || currentTime <= 0}
+            title="Rewind 5 seconds"
+            aria-label="Rewind 5 seconds"
           >
-            <Square size={14} />
+            <RotateCcw size={15} />
+            <span className="btn-label-sub">5s</span>
           </button>
-        )}
 
-        {/* Mute button */}
-        <button
-          type="button"
-          className="soundplayer-ctrl-btn sec-btn"
-          onClick={handleToggleMute}
-          title={isMuted ? 'Unmute' : 'Mute'}
-          aria-label={isMuted ? 'Unmute' : 'Mute'}
-        >
-          {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-        </button>
+          {/* Skip forward 5s */}
+          <button
+            type="button"
+            className="soundplayer-ctrl-btn sec-btn"
+            onClick={() => handleSkipSeconds(5)}
+            disabled={!duration || currentTime >= duration}
+            title="Forward 5 seconds"
+            aria-label="Forward 5 seconds"
+          >
+            <RotateCw size={15} />
+            <span className="btn-label-sub">5s</span>
+          </button>
 
-        {/* Speed Selector Pills */}
-        <div className="soundplayer-speed-group" role="radiogroup" aria-label="Playback speed">
-          {[
-            { label: '0.75x', val: 0.75 },
-            { label: '1x', val: 1.0 },
-            { label: '1.25x', val: 1.25 },
-            { label: '1.5x', val: 1.5 },
-          ].map((s) => (
+          {/* Stop button (visible while playing or paused mid-track) */}
+          {(isPlaying || currentTime > 0) && (
             <button
-              key={s.val}
               type="button"
-              className={`speed-chip ${Math.abs(playbackSpeed - s.val) < 0.05 ? 'active' : ''}`}
-              onClick={() => handleSpeedChange(s.val)}
-              title={`${s.label} speed`}
+              className="soundplayer-ctrl-btn sec-btn"
+              onClick={handleStop}
+              title="Stop and reset to start"
+              aria-label="Stop playback"
             >
-              {s.label}
+              <Square size={14} />
             </button>
-          ))}
+          )}
+
+          {/* Mute button */}
+          <button
+            type="button"
+            className="soundplayer-ctrl-btn sec-btn"
+            onClick={handleToggleMute}
+            title={isMuted ? 'Unmute' : 'Mute'}
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+          >
+            {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+          </button>
+
+          {/* Speed Selector Pills */}
+          <div className="soundplayer-speed-group" role="radiogroup" aria-label="Playback speed">
+            {[
+              { label: '0.75x', val: 0.75 },
+              { label: '1x', val: 1.0 },
+              { label: '1.25x', val: 1.25 },
+              { label: '1.5x', val: 1.5 },
+            ].map((s) => (
+              <button
+                key={s.val}
+                type="button"
+                className={`speed-chip ${Math.abs(playbackSpeed - s.val) < 0.05 ? 'active' : ''}`}
+                onClick={() => handleSpeedChange(s.val)}
+                title={`${s.label} speed`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

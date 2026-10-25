@@ -36,6 +36,7 @@ import {
   Moon,
   Palette,
   Pencil,
+  Plus,
   Quote,
   RotateCw,
   Save,
@@ -308,7 +309,15 @@ export default function App() {
   const [pasteToast, setPasteToast] = useState(null);
 
   // ── Voice & Audio state ──
-  const [voiceLang, setVoiceLang] = useState('en-US');
+  const [voiceLang, setVoiceLang] = useState(() => {
+    return localStorage.getItem('thought_organizer_voice_lang') || 'ur-PK';
+  });
+
+  useEffect(() => {
+    if (voiceLang) {
+      localStorage.setItem('thought_organizer_voice_lang', voiceLang);
+    }
+  }, [voiceLang]);
 
   const [ttsRate, setTtsRate] = useState(() => {
     const saved = localStorage.getItem('tts_playback_rate');
@@ -2299,6 +2308,39 @@ export default function App() {
           showPasteToast('Gemini connected! Studio voice & Urdu AI ready.');
         }}
       />
+
+      {/* ── Mobile Bottom Navigation Bar (Ergonomic for Phones & Tablets) ── */}
+      <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeView === 'home' ? 'active' : ''}`}
+          onClick={() => setActiveView('home')}
+          aria-label="Home"
+        >
+          <BookOpen size={20} />
+          <span>Home</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-fab ${activeView === 'add' ? 'active' : ''}`}
+          onClick={() => setActiveView('add')}
+          aria-label="New Thought"
+          title="Add New Thought / Voice Typing"
+        >
+          <Plus size={26} />
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeView === 'settings' ? 'active' : ''}`}
+          onClick={() => setActiveView('settings')}
+          aria-label="Settings"
+        >
+          <Settings size={20} />
+          <span>Settings</span>
+        </button>
+      </nav>
     </div>
   );
 }
