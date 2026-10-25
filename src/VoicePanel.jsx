@@ -331,94 +331,136 @@ export default function VoicePanel({
 
       {!isCollapsed && (
         <div className="voice-panel-body">
-          {/* Engine Selector Row */}
-          <div className="voice-engine-row">
-            <span className="voice-lang-label">Speech Engine:</span>
-            <div className="voice-engine-pills" role="radiogroup" aria-label="Speech Engine">
+          {/* Enhanced Speech Engine Selector */}
+          <div className="voice-engine-section">
+            <div className="voice-section-header">
+              <span className="voice-section-label">Speech Engine:</span>
+              <span className="engine-active-indicator">
+                {sttEngine === 'groq' && <span className="indicator-tag groq">⚡ Groq LPU (Active)</span>}
+                {sttEngine === 'gemini' && <span className="indicator-tag gemini">✨ Gemini Audio (Active)</span>}
+                {sttEngine === 'azure' && <span className="indicator-tag azure">☁️ Azure Cloud (Active)</span>}
+              </span>
+            </div>
+
+            <div className="engine-tiles-grid" role="radiogroup" aria-label="Speech Engine">
+              {/* Groq Whisper AI */}
               <button
                 type="button"
-                className={`engine-pill ${sttEngine === 'groq' ? 'active' : ''}`}
+                role="radio"
+                aria-checked={sttEngine === 'groq'}
+                className={`engine-tile ${sttEngine === 'groq' ? 'active groq' : ''}`}
                 onClick={() => setSttEngine('groq')}
                 title="Groq Whisper: ultra-fast (200ms) authentic Urdu Perso-Arabic script & code-switching"
               >
-                <Zap size={13} />
-                <span>Groq Whisper AI</span>
-                <span className="pill-badge">Recommended</span>
+                <div className="engine-tile-header">
+                  <div className="engine-tile-icon groq">
+                    <Zap size={15} />
+                  </div>
+                  <span className="engine-tile-pill groq">Fastest</span>
+                </div>
+                <div className="engine-tile-body">
+                  <span className="engine-tile-title">Groq Whisper</span>
+                  <span className="engine-tile-meta">Large-v3 LPU</span>
+                </div>
               </button>
 
+              {/* Google Gemini */}
               <button
                 type="button"
-                className={`engine-pill ${sttEngine === 'gemini' ? 'active' : ''}`}
+                role="radio"
+                aria-checked={sttEngine === 'gemini'}
+                className={`engine-tile ${sttEngine === 'gemini' ? 'active gemini' : ''}`}
                 onClick={() => setSttEngine('gemini')}
                 title="Google Gemini: Multimodal AI Urdu & English speech-to-text recognition"
               >
-                <Sparkles size={13} />
-                <span>Google Gemini</span>
-                <span className="pill-badge gemini">Multimodal</span>
+                <div className="engine-tile-header">
+                  <div className="engine-tile-icon gemini">
+                    <Sparkles size={15} />
+                  </div>
+                  <span className="engine-tile-pill gemini">Multimodal</span>
+                </div>
+                <div className="engine-tile-body">
+                  <span className="engine-tile-title">Google Gemini</span>
+                  <span className="engine-tile-meta">Studio Audio AI</span>
+                </div>
               </button>
 
+              {/* Microsoft Azure Speech */}
               <button
                 type="button"
-                className={`engine-pill ${sttEngine === 'azure' ? 'active' : ''}`}
+                role="radio"
+                aria-checked={sttEngine === 'azure'}
+                className={`engine-tile ${sttEngine === 'azure' ? 'active azure' : ''}`}
                 onClick={() => setSttEngine('azure')}
                 title="Microsoft Azure Speech: neural cloud STT for Urdu & English"
               >
-                <Cloud size={13} />
-                <span>Azure Speech</span>
-                <span className="pill-badge azure">eastus</span>
+                <div className="engine-tile-header">
+                  <div className="engine-tile-icon azure">
+                    <Cloud size={15} />
+                  </div>
+                  <span className="engine-tile-pill azure">eastus</span>
+                </div>
+                <div className="engine-tile-body">
+                  <span className="engine-tile-title">Azure Speech</span>
+                  <span className="engine-tile-meta">Neural STT</span>
+                </div>
               </button>
             </div>
           </div>
 
-          {/* Language Selector */}
-          <div className="voice-lang-row">
-            <span className="voice-lang-label">Language:</span>
-            <div className="voice-lang-toggle" role="radiogroup">
+          {/* Spoken Language Selector */}
+          <div className="voice-lang-section">
+            <div className="voice-section-header">
+              <span className="voice-section-label">Spoken Language:</span>
+              {sttEngine === 'groq' && (
+                <div className="voice-model-pill-group">
+                  <button
+                    type="button"
+                    className={`model-sub-pill ${groqWhisper.whisperModel === 'whisper-large-v3-turbo' ? 'active' : ''}`}
+                    onClick={() => groqWhisper.setWhisperModel('whisper-large-v3-turbo')}
+                    title="200ms ultra-fast Whisper Large Turbo"
+                  >
+                    ⚡ Turbo v3
+                  </button>
+                  <button
+                    type="button"
+                    className={`model-sub-pill ${groqWhisper.whisperModel === 'whisper-large-v3' ? 'active' : ''}`}
+                    onClick={() => groqWhisper.setWhisperModel('whisper-large-v3')}
+                    title="Whisper Large v3 (maximum nuance)"
+                  >
+                    🎯 Large v3
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="voice-lang-segmented-bar" role="radiogroup" aria-label="Spoken Language">
               <button
                 type="button"
-                className={`lang-pill ${currentLang === 'ur-PK' ? 'active' : ''}`}
+                className={`lang-segment-btn ${currentLang === 'ur-PK' ? 'active' : ''}`}
                 onClick={() => { setCurrentLang('ur-PK'); if (setLang) setLang('ur-PK'); }}
               >
-                🇵🇰 اردو Urdu
+                <span className="lang-flag">🇵🇰</span>
+                <span className="lang-name">اردو Urdu</span>
               </button>
               <button
                 type="button"
-                className={`lang-pill ${currentLang === 'auto' ? 'active' : ''}`}
+                className={`lang-segment-btn ${currentLang === 'auto' ? 'active' : ''}`}
                 onClick={() => { setCurrentLang('auto'); if (setLang) setLang('auto'); }}
                 title="Speak mixed Urdu and English (code-switched)"
               >
-                🌐 مخلوط Bilingual
+                <span className="lang-flag">🌐</span>
+                <span className="lang-name">مخلوط Bilingual</span>
               </button>
               <button
                 type="button"
-                className={`lang-pill ${currentLang === 'en-US' ? 'active' : ''}`}
+                className={`lang-segment-btn ${currentLang === 'en-US' ? 'active' : ''}`}
                 onClick={() => { setCurrentLang('en-US'); if (setLang) setLang('en-US'); }}
               >
-                🇬🇧 English
+                <span className="lang-flag">🇬🇧</span>
+                <span className="lang-name">English</span>
               </button>
             </div>
-
-            {/* Model Pill (Visible for Groq Whisper) */}
-            {sttEngine === 'groq' && (
-              <div className="voice-model-pill-group">
-                <button
-                  type="button"
-                  className={`model-sub-pill ${groqWhisper.whisperModel === 'whisper-large-v3-turbo' ? 'active' : ''}`}
-                  onClick={() => groqWhisper.setWhisperModel('whisper-large-v3-turbo')}
-                  title="200ms ultra-fast Whisper Large Turbo"
-                >
-                  ⚡ Turbo v3
-                </button>
-                <button
-                  type="button"
-                  className={`model-sub-pill ${groqWhisper.whisperModel === 'whisper-large-v3' ? 'active' : ''}`}
-                  onClick={() => groqWhisper.setWhisperModel('whisper-large-v3')}
-                  title="Whisper Large v3 (maximum nuance)"
-                >
-                  🎯 Large v3
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Mic Button + Info */}
