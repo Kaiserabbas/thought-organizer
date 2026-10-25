@@ -3829,6 +3829,11 @@ h1 {
   color: #0078d4 !important;
 }
 
+.pill-badge.gemini {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #8b5cf6 !important;
+}
+
 /* ─── Dedicated Post SoundPlayer with Track Time (Full View) ─── */
 .post-soundplayer-container {
   direction: ltr;
