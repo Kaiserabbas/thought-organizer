@@ -42,7 +42,7 @@ export default function VoicePanel({
   setLang,
   ttsRate = 0.85,
   ttsPitch = 0.68,
-  voiceEngine = 'azure',
+  voiceEngine = 'gemini',
   onRequireGeminiKey,
 }) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
@@ -555,7 +555,7 @@ export default function VoicePanel({
                 className="voice-action-btn"
                 onClick={handleSpeak}
                 disabled={isSpeaking || isLoadingAudio}
-                title={voiceEngine === 'azure' ? 'Listen back in Azure Neural Voice (ur-PK-AsadNeural)' : voiceEngine === 'gemini' ? 'Listen back in Gemini spiritual voice' : 'Listen back in voice'}
+                title="Listen back in Google Gemini spiritual voice"
               >
                 {isLoadingAudio ? <Loader2 size={14} className="spin-icon" /> : <Volume2 size={14} />}
                 <span>{isLoadingAudio ? 'Loading...' : isSpeaking ? 'Playing...' : 'Listen'}</span>

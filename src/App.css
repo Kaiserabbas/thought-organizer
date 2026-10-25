@@ -3789,6 +3789,41 @@ h1 {
   line-height: 1.4;
 }
 
+.voice-engine-single-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.08);
+  margin-top: 8px;
+}
+
+.voice-engine-single-card .engine-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #8b5cf6;
+}
+
+[data-theme='dark'] .voice-engine-single-card {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.45);
+}
+
+[data-theme='dark'] .voice-engine-single-card .engine-title {
+  color: #c4b5fd;
+}
+
+.voice-engine-single-card .engine-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
 .pill-badge.azure {
   background: rgba(0, 120, 212, 0.15) !important;
   color: #0078d4 !important;

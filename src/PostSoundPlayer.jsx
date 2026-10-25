@@ -16,9 +16,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { getOrGenerateSpiritualSpeech, hasGeminiApiKey } from './geminiService';
-import { generateAzureNeuralSpeech, hasAzureSpeechKey } from './azureSpeechService';
 import { triggerDownload } from './audioExporter';
-import { containsUrdu } from './useVoice';
 
 /**
  * Helper to format seconds into mm:ss
@@ -36,7 +34,6 @@ export default function PostSoundPlayer({
   thought,
   onRequireGeminiKey,
   defaultRate = 0.85,
-  defaultPitch = 0.68,
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -44,7 +41,6 @@ export default function PostSoundPlayer({
   const [duration, setDuration] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(defaultRate || 1.0);
   const [isMuted, setIsMuted] = useState(false);
-  const [activeVoiceProvider, setActiveVoiceProvider] = useState('gemini'); // 'gemini' | 'azure'
   const [errorMessage, setErrorMessage] = useState(null);
 
   const audioRef = useRef(null);
@@ -59,8 +55,6 @@ export default function PostSoundPlayer({
     .filter(Boolean)
     .join(' ')
     .trim();
-
-  const isUrdu = containsUrdu(thoughtText);
 
   // Stop & cleanup audio when thought changes or unmounts
   const cleanupAudio = useCallback(() => {
@@ -94,7 +88,7 @@ export default function PostSoundPlayer({
   }, [thought?.id, cleanupAudio]);
 
   /**
-   * Generates audio using Google Gemini Voice (or Azure fallback)
+   * Generates audio using Google Gemini Voice
    */
   const loadAudio = useCallback(async () => {
     if (!thoughtText) return null;
@@ -102,41 +96,24 @@ export default function PostSoundPlayer({
     setErrorMessage(null);
 
     let blob = null;
-    let provider = 'gemini';
 
-    // 1. Try Google Gemini Voice first if API key is present
+    // Google Gemini Voice
     if (hasGeminiApiKey()) {
       try {
         blob = await getOrGenerateSpiritualSpeech(thoughtText, {
           voice: 'Charon',
         });
-        provider = 'gemini';
       } catch (geminiErr) {
-        console.warn('Gemini Voice failed, falling back:', geminiErr);
+        console.warn('Gemini Voice failed:', geminiErr);
       }
     }
 
-    // 2. Fallback to Azure Neural Voice if Gemini failed or missing key
-    if (!blob && hasAzureSpeechKey()) {
-      try {
-        blob = await generateAzureNeuralSpeech(thoughtText, {
-          lang: isUrdu ? 'ur-PK' : 'en-US',
-          rate: playbackSpeed,
-          pitch: defaultPitch,
-        });
-        provider = 'azure';
-      } catch (azureErr) {
-        console.warn('Azure Voice fallback failed:', azureErr);
-      }
-    }
-
-    // 3. If Gemini key was missing and user has no keys
     if (!blob) {
       setIsLoading(false);
       setErrorMessage(
         hasGeminiApiKey()
           ? 'Unable to generate Gemini voice audio. Please check your internet connection.'
-          : 'Google Gemini API key required for Gemini Studio Voice. You can add it in Settings.'
+          : 'Google Gemini API key required for Gemini Studio Voice. Please add your key in Settings.'
       );
       if (!hasGeminiApiKey() && onRequireGeminiKey) {
         onRequireGeminiKey();
@@ -151,7 +128,6 @@ export default function PostSoundPlayer({
 
     const url = URL.createObjectURL(blob);
     currentBlobUrlRef.current = url;
-    setActiveVoiceProvider(provider);
     setIsLoading(false);
 
     // Initialize HTML Audio element
@@ -186,7 +162,7 @@ export default function PostSoundPlayer({
 
     audioRef.current = audio;
     return audio;
-  }, [thoughtText, isUrdu, playbackSpeed, defaultPitch, isMuted, onRequireGeminiKey]);
+  }, [thoughtText, playbackSpeed, isMuted, onRequireGeminiKey]);
 
   /**
    * Play / Pause toggle
@@ -296,17 +272,16 @@ export default function PostSoundPlayer({
       return;
     }
 
-    // Otherwise generate and download
+    // Otherwise generate and download with Google Gemini Voice
     try {
       setIsLoading(true);
-      let blob = null;
-      if (hasGeminiApiKey()) {
-        blob = await getOrGenerateSpiritualSpeech(thoughtText, { voice: 'Charon' });
-      } else if (hasAzureSpeechKey()) {
-        blob = await generateAzureNeuralSpeech(thoughtText, { lang: isUrdu ? 'ur-PK' : 'en-US' });
+      if (!hasGeminiApiKey()) {
+        if (onRequireGeminiKey) onRequireGeminiKey();
+        return;
       }
+      const blob = await getOrGenerateSpiritualSpeech(thoughtText, { voice: 'Charon' });
       if (blob) {
-        triggerDownload(blob, `${cleanName}-voice`);
+        triggerDownload(blob, `${cleanName}-gemini-voice`);
       }
     } catch (err) {
       console.error('Download error:', err);
@@ -328,11 +303,7 @@ export default function PostSoundPlayer({
               <Sparkles size={16} />
             </span>
             <strong className="brand-name">Google Gemini Voice</strong>
-            <span className="voice-tag">
-              {activeVoiceProvider === 'gemini'
-                ? 'Charon · Spiritual Male'
-                : 'Azure Asad · Spiritual Male'}
-            </span>
+            <span className="voice-tag">Charon · Spiritual Male</span>
           </div>
 
           <div className="soundplayer-header-actions">
@@ -341,7 +312,7 @@ export default function PostSoundPlayer({
               className="soundplayer-action-icon"
               onClick={handleDownloadAudio}
               disabled={isLoading || !thoughtText}
-              title="Download post audio"
+              title="Download post audio (Google Gemini Voice)"
               aria-label="Download audio"
             >
               <Download size={14} />

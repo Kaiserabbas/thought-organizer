@@ -1,18 +1,13 @@
-// audioExporter.js — Generates and exports studio-grade heavy spiritual male voice audio files (.mp3 / .wav)
-// Supports Microsoft Azure Neural Voice (ur-PK-AsadNeural / en-US-GuyNeural) and Google Gemini 3.8 Flash TTS.
+// audioExporter.js — Generates and exports studio-grade heavy spiritual male voice audio files (.wav)
+// Uses Google Gemini Flash TTS for authentic human male speech.
 
-import { generateAzureNeuralSpeech, hasAzureSpeechKey } from './azureSpeechService';
 import { generateGeminiSpiritualSpeech, hasGeminiApiKey } from './geminiService';
 
 /**
- * Generates an authentic heavy, spiritual male voice audio file using Azure Neural Voice or Gemini.
+ * Generates an authentic heavy, spiritual male voice audio file using Google Gemini.
  * @param {string} text - Thought text to convert to speech
  * @param {Object} [options]
- * @param {string} [options.engine] - 'azure' | 'gemini' | 'auto'
- * @param {string} [options.lang] - 'ur-PK' | 'en-US'
- * @param {string} [options.voice] - Custom voice name
- * @param {number} [options.rate] - Speed multiplier
- * @param {number} [options.pitch] - Pitch multiplier
+ * @param {string} [options.voice='Charon'] - Gemini voice name
  * @returns {Promise<{ blob: Blob, extension: string }>} - Audio Blob & file extension
  */
 export async function generateSpiritualVoiceAudio(text, options = {}) {
@@ -20,41 +15,16 @@ export async function generateSpiritualVoiceAudio(text, options = {}) {
     throw new Error('No text provided for audio export');
   }
 
-  const { engine = 'azure', lang, voice, rate = 0.85, pitch = 0.68 } = options;
+  const { voice = 'Charon' } = options;
 
-  // 1. Try Azure Neural Voice if explicitly requested or auto-selected
-  if (engine === 'azure' || (engine === 'auto' && hasAzureSpeechKey())) {
-    try {
-      const blob = await generateAzureNeuralSpeech(text, { lang, voice, rate, pitch });
-      return { blob, extension: 'mp3' };
-    } catch (azureErr) {
-      console.warn('Azure TTS export failed, falling back:', azureErr);
-      if (engine === 'azure') throw azureErr;
-    }
+  if (!hasGeminiApiKey()) {
+    const err = new Error('Google Gemini API key is required to export studio spiritual voice audio.');
+    err.code = 'MISSING_GEMINI_KEY';
+    throw err;
   }
 
-  // 2. Try Gemini 3.8 Flash TTS if requested or available
-  if (engine === 'gemini' || (engine === 'auto' && hasGeminiApiKey())) {
-    try {
-      const blob = await generateGeminiSpiritualSpeech(text, {
-        voice: voice || 'Charon',
-      });
-      return { blob, extension: 'wav' };
-    } catch (geminiErr) {
-      console.warn('Gemini TTS export failed, falling back:', geminiErr);
-      if (engine === 'gemini') throw geminiErr;
-    }
-  }
-
-  // 3. Fallback: If Azure is configured, try it as last AI resort
-  if (hasAzureSpeechKey()) {
-    const blob = await generateAzureNeuralSpeech(text, { lang, voice, rate, pitch });
-    return { blob, extension: 'mp3' };
-  }
-
-  const err = new Error('An active Azure Speech or Gemini API key is required to export studio spiritual voice audio.');
-  err.code = 'MISSING_API_KEY';
-  throw err;
+  const blob = await generateGeminiSpiritualSpeech(text, { voice });
+  return { blob, extension: 'wav' };
 }
 
 /**

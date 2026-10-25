@@ -318,13 +318,7 @@ export default function App() {
     const saved = localStorage.getItem('tts_playback_pitch');
     return saved ? parseFloat(saved) : 0.68;
   });
-  const [voiceEngine, setVoiceEngine] = useState(() => {
-    const saved = localStorage.getItem('tts_voice_engine');
-    if (!saved || saved === 'existing') {
-      return 'azure';
-    }
-    return saved;
-  });
+  const [voiceEngine, setVoiceEngine] = useState('gemini');
 
   const [activeSpeakingThoughtId, setActiveSpeakingThoughtId] = useState(null);
   const [showTranslated, setShowTranslated] = useState(false);
@@ -1080,9 +1074,7 @@ export default function App() {
       lang,
       rate: ttsRate,
       pitch: ttsPitch,
-      engine: voiceEngine,
-      useAzure: voiceEngine === 'azure',
-      useGemini: voiceEngine === 'gemini',
+      engine: 'gemini',
       onEnd: () => setActiveSpeakingThoughtId(null),
       onError: (err) => {
         setActiveSpeakingThoughtId(null);
@@ -1322,9 +1314,7 @@ export default function App() {
                           lang: isUr ? 'ur-PK' : voiceLang,
                           rate: ttsRate,
                           pitch: ttsPitch,
-                          engine: voiceEngine,
-      useAzure: voiceEngine === 'azure',
-      useGemini: voiceEngine === 'gemini',
+                          engine: 'gemini',
                           onEnd: () => setActiveSpeakingThoughtId(null),
                           onError: (err) => {
                             setActiveSpeakingThoughtId(null);
@@ -1334,7 +1324,7 @@ export default function App() {
                           },
                         });
                       }}
-                      title={voiceEngine === 'azure' ? 'Listen to draft in Azure Neural Voice (Default)' : voiceEngine === 'gemini' ? 'Listen to draft in Gemini studio voice' : 'Listen to draft in voice'}
+                      title="Listen to draft in Google Gemini studio voice"
                     >
                       {isLoadingAudio && activeSpeakingThoughtId === 'draft' ? (
                         <Loader2 size={14} className="spin-icon" />
@@ -1363,7 +1353,7 @@ export default function App() {
                         setIsExportingAudio(true);
                         const isUr = containsUrdu(draftText);
                         const filename = `${(formData.subject || 'thought').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_')}.wav`;
-                        const res = await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename, engine: voiceEngine });
+                        const res = await exportAudio(draftText, { lang: isUr ? 'ur-PK' : voiceLang, filename });
                         setIsExportingAudio(false);
                         if (res && res.code === 'MISSING_GEMINI_KEY') {
                           setIsGeminiModalOpen(true);
@@ -1802,9 +1792,7 @@ export default function App() {
                 lang,
                 rate: ttsRate,
                 pitch: ttsPitch,
-                engine: voiceEngine,
-      useAzure: voiceEngine === 'azure',
-      useGemini: voiceEngine === 'gemini',
+                engine: 'gemini',
               });
             }}
           />
