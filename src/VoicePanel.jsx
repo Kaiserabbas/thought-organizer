@@ -331,80 +331,53 @@ export default function VoicePanel({
 
       {!isCollapsed && (
         <div className="voice-panel-body">
-          {/* Enhanced Speech Engine Selector */}
+          {/* Speech Engine Selector */}
           <div className="voice-engine-section">
-            <div className="voice-section-header">
+            <div className="voice-section-header voice-engine-header">
               <span className="voice-section-label">Speech Engine:</span>
-              <span className="engine-active-indicator">
-                {sttEngine === 'groq' && <span className="indicator-tag groq">⚡ Groq LPU (Active)</span>}
-                {sttEngine === 'gemini' && <span className="indicator-tag gemini">✨ Gemini Audio (Active)</span>}
-                {sttEngine === 'azure' && <span className="indicator-tag azure">☁️ Azure Cloud (Active)</span>}
-              </span>
-            </div>
+              <div className="engine-circles-group" role="radiogroup" aria-label="Speech Engine">
+                {/* Azure */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sttEngine === 'azure'}
+                  className={`engine-circle-btn ${sttEngine === 'azure' ? 'active azure' : ''}`}
+                  onClick={() => setSttEngine('azure')}
+                  title="Azure Speech"
+                  aria-label="Azure Speech"
+                >
+                  <Cloud size={16} />
+                  <span className="circle-label">Azure</span>
+                </button>
 
-            <div className="engine-tiles-grid" role="radiogroup" aria-label="Speech Engine">
-              {/* Groq Whisper AI */}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={sttEngine === 'groq'}
-                className={`engine-tile ${sttEngine === 'groq' ? 'active groq' : ''}`}
-                onClick={() => setSttEngine('groq')}
-                title="Groq Whisper: ultra-fast (200ms) authentic Urdu Perso-Arabic script & code-switching"
-              >
-                <div className="engine-tile-header">
-                  <div className="engine-tile-icon groq">
-                    <Zap size={15} />
-                  </div>
-                  <span className="engine-tile-pill groq">Fastest</span>
-                </div>
-                <div className="engine-tile-body">
-                  <span className="engine-tile-title">Groq Whisper</span>
-                  <span className="engine-tile-meta">Large-v3 LPU</span>
-                </div>
-              </button>
+                {/* Gemini */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sttEngine === 'gemini'}
+                  className={`engine-circle-btn ${sttEngine === 'gemini' ? 'active gemini' : ''}`}
+                  onClick={() => setSttEngine('gemini')}
+                  title="Google Gemini"
+                  aria-label="Google Gemini"
+                >
+                  <Sparkles size={16} />
+                  <span className="circle-label">Gemini</span>
+                </button>
 
-              {/* Google Gemini */}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={sttEngine === 'gemini'}
-                className={`engine-tile ${sttEngine === 'gemini' ? 'active gemini' : ''}`}
-                onClick={() => setSttEngine('gemini')}
-                title="Google Gemini: Multimodal AI Urdu & English speech-to-text recognition"
-              >
-                <div className="engine-tile-header">
-                  <div className="engine-tile-icon gemini">
-                    <Sparkles size={15} />
-                  </div>
-                  <span className="engine-tile-pill gemini">Multimodal</span>
-                </div>
-                <div className="engine-tile-body">
-                  <span className="engine-tile-title">Google Gemini</span>
-                  <span className="engine-tile-meta">Studio Audio AI</span>
-                </div>
-              </button>
-
-              {/* Microsoft Azure Speech */}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={sttEngine === 'azure'}
-                className={`engine-tile ${sttEngine === 'azure' ? 'active azure' : ''}`}
-                onClick={() => setSttEngine('azure')}
-                title="Microsoft Azure Speech: neural cloud STT for Urdu & English"
-              >
-                <div className="engine-tile-header">
-                  <div className="engine-tile-icon azure">
-                    <Cloud size={15} />
-                  </div>
-                  <span className="engine-tile-pill azure">eastus</span>
-                </div>
-                <div className="engine-tile-body">
-                  <span className="engine-tile-title">Azure Speech</span>
-                  <span className="engine-tile-meta">Neural STT</span>
-                </div>
-              </button>
+                {/* Groq */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sttEngine === 'groq'}
+                  className={`engine-circle-btn ${sttEngine === 'groq' ? 'active groq' : ''}`}
+                  onClick={() => setSttEngine('groq')}
+                  title="Groq Whisper"
+                  aria-label="Groq Whisper"
+                >
+                  <Zap size={16} />
+                  <span className="circle-label">Groq</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -484,27 +457,16 @@ export default function VoicePanel({
 
             <div className="voice-mic-info">
               <strong>
-                {groqWhisper.isTranscribing
-                  ? '⚡ Groq Whisper AI is transcribing into Urdu script...'
-                  : geminiSpeech.isTranscribing
-                  ? '✨ Google Gemini AI is transcribing multimodal audio...'
-                  : azureSpeech.isTranscribing
-                  ? '☁️ Azure Speech is transcribing into Urdu script...'
-                  : isRecording
+                {isRecording
                   ? (currentLang === 'ur-PK'
-                      ? `🔴 بولیں... سن رہا ہوں (${formatTimer(recordSeconds)}) — مکمل ہونے پر مائیک دبائیں`
-                      : `🔴 Recording audio (${formatTimer(recordSeconds)}) — tap mic to finish`)
+                      ? `🔴 بولیں... (${formatTimer(recordSeconds)})`
+                      : `🔴 Recording (${formatTimer(recordSeconds)})`)
+                  : isTranscribing
+                  ? 'Transcribing...'
                   : (currentLang === 'ur-PK'
-                      ? 'اردو میں بولنے کے لیے مائیک پر کلک کریں'
-                      : 'Click microphone to speak')}
+                      ? 'بولنے کے لیے مائیک دبائیں'
+                      : 'Tap to speak')}
               </strong>
-              <span className="voice-mic-sub">
-                {sttEngine === 'groq'
-                  ? 'Powered by Groq Whisper Large-v3. Converts speech accurately into authentic Urdu Perso-Arabic script.'
-                  : sttEngine === 'gemini'
-                  ? 'Powered by Google Gemini Multimodal Audio. High-accuracy multilingual speech understanding.'
-                  : 'Powered by Microsoft Azure Speech Services. Real-time cloud transcription in Urdu & English.'}
-              </span>
             </div>
 
             {/* Upload audio file button */}
@@ -522,10 +484,11 @@ export default function VoicePanel({
                   className="voice-upload-file-btn"
                   onClick={() => audioFileRef.current?.click()}
                   disabled={isBusy}
-                  title="Upload an audio note or recording (.m4a, .mp3, .wav, .webm)"
+                  title="Upload audio note (.m4a, .mp3, .wav, .webm)"
+                  aria-label="Upload audio note"
                 >
                   <Upload size={14} />
-                  <span>Upload Audio File</span>
+                  <span>Upload Audio</span>
                 </button>
               </div>
             )}
@@ -546,26 +509,22 @@ export default function VoicePanel({
               <div className="transcript-loading-row">
                 <Loader2 size={16} className="spin-icon" />
                 <span>
-                  Transcribing audio with{' '}
+                  Transcribing with{' '}
                   {sttEngine === 'azure'
-                    ? 'Microsoft Azure Speech'
+                    ? 'Azure'
                     : sttEngine === 'gemini'
-                    ? 'Google Gemini AI'
-                    : 'Groq Whisper'}
+                    ? 'Gemini'
+                    : 'Groq'}
                   ...
                 </span>
               </div>
             ) : activeTranscript ? (
               <span className="transcript-final">{activeTranscript}</span>
-            ) : (
+            ) : isRecording ? (
               <span className="transcript-placeholder">
-                {isRecording
-                  ? (isUrdu ? 'سن رہا ہوں، بولیں... (Listening, speak now)' : 'Listening, speak now...')
-                  : (isUrdu
-                      ? 'بولنے کے لیے اوپر مائیک پر کلک کریں یا آڈیو فائل اپلوڈ کریں'
-                      : 'Click mic above to start speaking or upload an audio file')}
+                {isUrdu ? 'سن رہا ہوں...' : 'Listening...'}
               </span>
-            )}
+            ) : null}
           </div>
 
           {/* Error */}
@@ -580,10 +539,10 @@ export default function VoicePanel({
                 type="button"
                 className="voice-action-btn voice-draft-btn"
                 onClick={handleDraftFill}
-                title="Set first sentence as Subject, rest as Description"
+                title="Auto-fill Post"
+                aria-label="Auto-fill Post"
               >
                 <Zap size={14} />
-                <span>Auto-fill Post</span>
               </button>
 
               <button
@@ -591,10 +550,10 @@ export default function VoicePanel({
                 className="voice-action-btn"
                 onClick={handleSpeak}
                 disabled={isSpeaking || isLoadingAudio}
-                title="Listen back in Google Gemini spiritual voice"
+                title="Listen back"
+                aria-label="Listen back"
               >
                 {isLoadingAudio ? <Loader2 size={14} className="spin-icon" /> : <Volume2 size={14} />}
-                <span>{isLoadingAudio ? 'Loading...' : isSpeaking ? 'Playing...' : 'Listen'}</span>
               </button>
 
               <button
@@ -602,20 +561,20 @@ export default function VoicePanel({
                 className="voice-action-btn voice-export-btn"
                 onClick={handleExportAudio}
                 disabled={isExporting}
-                title="Export audio file (.mp3 / .wav) in heavy spiritual male voice"
+                title="Export audio file"
+                aria-label="Export audio file"
               >
                 <Download size={14} />
-                <span>{isExporting ? 'Exporting...' : 'Export Audio'}</span>
               </button>
 
               <button
                 type="button"
                 className="voice-action-btn"
                 onClick={handleCopy}
-                title="Copy transcript to clipboard"
+                title={copyFeedback ? 'Copied!' : 'Copy transcript'}
+                aria-label="Copy transcript"
               >
                 <Copy size={14} />
-                <span>{copyFeedback ? 'Copied!' : 'Copy'}</span>
               </button>
 
               <button
@@ -623,25 +582,12 @@ export default function VoicePanel({
                 className="voice-action-btn voice-clear-btn"
                 onClick={resetTranscript}
                 title="Clear transcript"
+                aria-label="Clear transcript"
               >
                 <X size={14} />
-                <span>Clear</span>
               </button>
             </div>
           )}
-
-          {/* Footer note */}
-          <div className="voice-commands-hint">
-            <span>
-              {sttEngine === 'gemini' ? (
-                <>✨ Powered by <strong>Google Gemini Multimodal AI</strong>: Advanced Urdu & English speech recognition</>
-              ) : sttEngine === 'azure' ? (
-                <>☁️ Powered by <strong>Microsoft Azure Speech</strong>: Neural Urdu STT with cloud recognition</>
-              ) : (
-                <>⚡ Powered by <strong>Groq Whisper LPU</strong>: Transcribes Urdu in authentic حروفِ تہجی with code-switching</>
-              )}
-            </span>
-          </div>
         </div>
       )}
     </div>

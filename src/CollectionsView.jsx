@@ -105,7 +105,8 @@ export default function CollectionsView({
   const totalFavorites = thoughts.filter((thought) => thought.favorite).length;
 
   const renderThoughtCard = (thought) => {
-    const cardColorClass = `card-color-${thought.cardColor || 'default'}`;
+    const isCustomColor = thought.cardColor && thought.cardColor.startsWith('#');
+    const cardColorClass = isCustomColor ? '' : `card-color-${thought.cardColor || 'default'}`;
     const isSpeakingThis = activeSpeakingThoughtId === thought.id;
     const isLoadingThis = isSpeakingThis && isLoadingAudio;
 
@@ -113,6 +114,7 @@ export default function CollectionsView({
       <div
         key={thought.id}
         className={`article-card ${cardColorClass}`}
+        style={isCustomColor ? { backgroundColor: thought.cardColor } : undefined}
         onClick={() => setSelectedThought(thought)}
         role="button"
         tabIndex={0}

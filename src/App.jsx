@@ -36,6 +36,7 @@ import {
   Moon,
   Palette,
   Pencil,
+  Pipette,
   Plus,
   Quote,
   RotateCw,
@@ -64,17 +65,27 @@ const CARD_COLORS = [
   { id: 'blue', label: 'Sky Blue', bg: '#eff6ff' },
   { id: 'rose', label: 'Rose', bg: '#fff1f2' },
   { id: 'purple', label: 'Lavender', bg: '#faf5ff' },
+  { id: 'indigo', label: 'Indigo', bg: '#eef2ff' },
+  { id: 'teal', label: 'Teal', bg: '#f0fdfa' },
+  { id: 'cyan', label: 'Cyan', bg: '#ecfeff' },
+  { id: 'orange', label: 'Peach', bg: '#fff7ed' },
+  { id: 'fuchsia', label: 'Fuchsia', bg: '#fdf4ff' },
   { id: 'slate', label: 'Slate', bg: '#f8fafc' },
 ];
 
 const TEXT_COLORS = [
   { id: '', label: 'Default', color: '' },
   { id: '#dc2626', label: 'Ruby Red', color: '#dc2626' },
-  { id: '#16a34a', label: 'Forest Green', color: '#16a34a' },
-  { id: '#2563eb', label: 'Royal Blue', color: '#2563eb' },
+  { id: '#ea580c', label: 'Flame Orange', color: '#ea580c' },
   { id: '#d97706', label: 'Warm Amber', color: '#d97706' },
+  { id: '#16a34a', label: 'Forest Green', color: '#16a34a' },
+  { id: '#0d9488', label: 'Teal', color: '#0d9488' },
+  { id: '#2563eb', label: 'Royal Blue', color: '#2563eb' },
+  { id: '#4f46e5', label: 'Indigo', color: '#4f46e5' },
   { id: '#9333ea', label: 'Deep Purple', color: '#9333ea' },
+  { id: '#c026d3', label: 'Fuchsia', color: '#c026d3' },
   { id: '#e11d48', label: 'Crimson Rose', color: '#e11d48' },
+  { id: '#475569', label: 'Slate Gray', color: '#475569' },
 ];
 
 function makeBlankForm(categories) {
@@ -1256,7 +1267,10 @@ export default function App() {
         {activeView === 'add' && (
           <section className="composer-page">
             <div className="composer-layout">
-              <div className={`capture-card card-color-${formData.cardColor || 'default'}`}>
+              <div
+                className={`capture-card ${formData.cardColor && !formData.cardColor.startsWith('#') ? `card-color-${formData.cardColor}` : ''}`}
+                style={formData.cardColor?.startsWith('#') ? { backgroundColor: formData.cardColor } : undefined}
+              >
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">New thought</p>
@@ -1282,8 +1296,9 @@ export default function App() {
                       className="composer-pill-btn"
                       onClick={() => handlePasteToDescription(false)}
                       title="Paste clipboard text into description"
+                      aria-label="Paste text"
                     >
-                      <ClipboardPaste size={14} /> Paste Text
+                      <ClipboardPaste size={15} />
                     </button>
 
                     <button
@@ -1299,8 +1314,9 @@ export default function App() {
                         showPasteToast('Draft copied to clipboard!');
                       }}
                       title="Copy current draft"
+                      aria-label="Copy draft"
                     >
-                      <Copy size={14} /> Copy Draft
+                      <Copy size={15} />
                     </button>
 
                     <button
@@ -1334,19 +1350,15 @@ export default function App() {
                         });
                       }}
                       title="Listen to draft in Google Gemini studio voice"
+                      aria-label="Listen draft"
                     >
                       {isLoadingAudio && activeSpeakingThoughtId === 'draft' ? (
-                        <Loader2 size={14} className="spin-icon" />
+                        <Loader2 size={15} className="spin-icon" />
                       ) : isSpeaking && activeSpeakingThoughtId === 'draft' ? (
-                        <VolumeX size={14} />
+                        <VolumeX size={15} />
                       ) : (
-                        <Volume2 size={14} />
+                        <Volume2 size={15} />
                       )}
-                      {isLoadingAudio && activeSpeakingThoughtId === 'draft'
-                        ? 'Loading...'
-                        : isSpeaking && activeSpeakingThoughtId === 'draft'
-                        ? 'Stop Voice'
-                        : 'Listen Voice'}
                     </button>
 
                     <button
@@ -1375,8 +1387,9 @@ export default function App() {
                         showPasteToast('Spiritual voice audio (.wav) exported!');
                       }}
                       title="Export spiritual voice audio (.wav)"
+                      aria-label="Export audio"
                     >
-                      <Download size={14} /> {isExportingAudio ? 'Exporting...' : 'Export Audio (.wav)'}
+                      {isExportingAudio ? <Loader2 size={15} className="spin-icon" /> : <Download size={15} />}
                     </button>
 
                     <button
@@ -1409,8 +1422,9 @@ export default function App() {
                         }
                       }}
                       title="Translate draft between Urdu & English"
+                      aria-label="Translate draft"
                     >
-                      <Languages size={14} /> {isTranslatingThought ? 'Translating...' : 'Translate Draft'}
+                      {isTranslatingThought ? <Loader2 size={15} className="spin-icon" /> : <Languages size={15} />}
                     </button>
                   </div>
 
@@ -1455,9 +1469,9 @@ export default function App() {
                         className="paste-quick-btn"
                         onClick={() => handlePasteToSubject(false)}
                         title="Paste from clipboard into subject"
+                        aria-label="Paste into subject"
                       >
-                        <ClipboardPaste size={12} />
-                        <span>Paste</span>
+                        <ClipboardPaste size={13} />
                       </button>
                     </div>
                     <input
@@ -1480,9 +1494,9 @@ export default function App() {
                         className="paste-quick-btn"
                         onClick={() => handlePasteToDescription(false)}
                         title="Paste from clipboard into description"
+                        aria-label="Paste into description"
                       >
-                        <ClipboardPaste size={12} />
-                        <span>Paste</span>
+                        <ClipboardPaste size={13} />
                       </button>
                     </div>
 
@@ -1493,9 +1507,9 @@ export default function App() {
                           className="toolbar-btn toolbar-paste-btn"
                           onClick={() => handlePasteToDescription(false)}
                           title="Paste from clipboard"
+                          aria-label="Paste from clipboard"
                         >
                           <ClipboardPaste size={14} />
-                          <span>Paste</span>
                         </button>
                       </div>
 
@@ -1595,12 +1609,23 @@ export default function App() {
                           <button
                             key={tc.id}
                             type="button"
-                            className={`color-dot-btn ${formData.textColor === tc.id ? 'active' : ''}`}
+                            className={`color-dot-btn ${formData.textColor === tc.color ? 'active' : ''}`}
                             style={{ backgroundColor: tc.color || 'var(--text-primary)' }}
                             onClick={() => setFormData((c) => ({ ...c, textColor: tc.color }))}
-                            title={`Text Color: ${tc.label}`}
+                            title={tc.label}
+                            aria-label={tc.label}
                           />
                         ))}
+                        <label className="custom-color-picker-btn" title="Pick custom text color">
+                          <input
+                            type="color"
+                            className="custom-color-input"
+                            value={formData.textColor?.startsWith('#') ? formData.textColor : '#1f2937'}
+                            onChange={(e) => setFormData((c) => ({ ...c, textColor: e.target.value }))}
+                            aria-label="Custom text color"
+                          />
+                          <Pipette size={11} className="picker-pipette-icon" />
+                        </label>
                       </div>
 
                       <div className="toolbar-divider" />
@@ -1613,23 +1638,23 @@ export default function App() {
                           className="font-picker-select"
                           value={formData.fontFamily || ''}
                           onChange={(e) => setFormData((c) => ({ ...c, fontFamily: e.target.value }))}
-                          title="Select Arabic or English font"
+                          title="Select Font"
                           aria-label="Font family"
                         >
                           <option value="">Default Font</option>
-                          <optgroup label="── Arabic Fonts (خطوط عربية) ──">
-                            <option value="cairo">Cairo (كايرو - حديث)</option>
-                            <option value="amiri">Amiri (أميري - كلاسيكي)</option>
-                            <option value="tajawal">Tajawal (تجوال - هندسي)</option>
-                            <option value="almarai">Almarai (المرعي - واضح)</option>
-                            <option value="nastaleeq">Nastaleeq (نستعلیق)</option>
+                          <optgroup label="── Urdu & Arabic Fonts (خطوط اردو وعربية) ──">
+                            {FONT_OPTIONS.filter((f) => f.group === 'Urdu / Arabic').map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.label}
+                              </option>
+                            ))}
                           </optgroup>
                           <optgroup label="── English Fonts ──">
-                            <option value="inter">Inter (Clean Sans)</option>
-                            <option value="playfair">Playfair Display (Serif)</option>
-                            <option value="lora">Lora (Editorial Serif)</option>
-                            <option value="outfit">Outfit (Modern Sans)</option>
-                            <option value="jetbrains">JetBrains Mono (Monospace)</option>
+                            {FONT_OPTIONS.filter((f) => f.group === 'English').map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.label}
+                              </option>
+                            ))}
                           </optgroup>
                         </select>
                       </div>
@@ -1675,12 +1700,22 @@ export default function App() {
                           className={`card-color-swatch swatch-${col.id} ${formData.cardColor === col.id ? 'active' : ''}`}
                           onClick={() => setFormData((current) => ({ ...current, cardColor: col.id }))}
                           title={col.label}
+                          aria-label={col.label}
                         >
-                          <span className="swatch-indicator" />
-                          <span className="swatch-name">{col.label}</span>
-                          {formData.cardColor === col.id && <Check size={13} className="swatch-check" />}
+                          <span className="swatch-indicator" style={col.bg ? { backgroundColor: col.bg } : undefined} />
+                          {formData.cardColor === col.id && <Check size={12} className="swatch-check" />}
                         </button>
                       ))}
+                      <label className="card-color-custom-label" title="Pick custom card background color">
+                        <input
+                          type="color"
+                          className="custom-color-input"
+                          value={formData.cardColor?.startsWith('#') ? formData.cardColor : '#ffffff'}
+                          onChange={(e) => setFormData((c) => ({ ...c, cardColor: e.target.value }))}
+                          aria-label="Custom card background color"
+                        />
+                        <Pipette size={13} className="custom-picker-icon" />
+                      </label>
                     </div>
                   </div>
 
@@ -1719,14 +1754,17 @@ export default function App() {
                       />
                     </label>
 
-                    <label className="favorite-toggle compact-fav">
-                      <input
-                        type="checkbox"
-                        checked={formData.favorite}
-                        onChange={(event) => setFormData((current) => ({ ...current, favorite: event.target.checked }))}
-                      />
-                      <Star size={16} className={formData.favorite ? 'filled' : ''} /> Mark as Favorite
-                    </label>
+                    <div className="field compact">
+                      <span className="field-label-spacer" aria-hidden="true">&nbsp;</span>
+                      <label className="favorite-toggle compact-fav">
+                        <input
+                          type="checkbox"
+                          checked={formData.favorite}
+                          onChange={(event) => setFormData((current) => ({ ...current, favorite: event.target.checked }))}
+                        />
+                        <Star size={16} className={formData.favorite ? 'filled' : ''} /> Add Favorite
+                      </label>
+                    </div>
                   </div>
 
                   <div className="form-footer">
@@ -1812,7 +1850,8 @@ export default function App() {
       {selectedThought && (
         <div className="preview-backdrop" role="dialog" aria-modal="true" onClick={closeSelectedThought}>
           <div
-            className={`preview-panel card-color-${selectedThought.cardColor || 'default'}`}
+            className={`preview-panel ${selectedThought.cardColor && !selectedThought.cardColor.startsWith('#') ? `card-color-${selectedThought.cardColor}` : ''}`}
+            style={selectedThought.cardColor?.startsWith('#') ? { backgroundColor: selectedThought.cardColor } : undefined}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="preview-head">
@@ -2083,12 +2122,23 @@ export default function App() {
                         <button
                           key={tc.id}
                           type="button"
-                          className={`color-dot-btn ${editFormData.textColor === tc.id ? 'active' : ''}`}
+                          className={`color-dot-btn ${editFormData.textColor === tc.color ? 'active' : ''}`}
                           style={{ backgroundColor: tc.color || 'var(--text-primary)' }}
                           onClick={() => setEditFormData((c) => ({ ...c, textColor: tc.color }))}
-                          title={`Text Color: ${tc.label}`}
+                          title={tc.label}
+                          aria-label={tc.label}
                         />
                       ))}
+                      <label className="custom-color-picker-btn" title="Pick custom text color">
+                        <input
+                          type="color"
+                          className="custom-color-input"
+                          value={editFormData.textColor?.startsWith('#') ? editFormData.textColor : '#1f2937'}
+                          onChange={(e) => setEditFormData((c) => ({ ...c, textColor: e.target.value }))}
+                          aria-label="Custom text color"
+                        />
+                        <Pipette size={11} className="picker-pipette-icon" />
+                      </label>
                     </div>
 
                     <div className="toolbar-divider" />
@@ -2101,23 +2151,23 @@ export default function App() {
                         className="font-picker-select"
                         value={editFormData.fontFamily || ''}
                         onChange={(e) => setEditFormData((c) => ({ ...c, fontFamily: e.target.value }))}
-                        title="Select Arabic or English font"
+                        title="Select Font"
                         aria-label="Font family"
                       >
                         <option value="">Default Font</option>
-                        <optgroup label="── Arabic Fonts (خطوط عربية) ──">
-                          <option value="cairo">Cairo (كايرو - حديث)</option>
-                          <option value="amiri">Amiri (أميري - كلاسيكي)</option>
-                          <option value="tajawal">Tajawal (تجوال - هندسي)</option>
-                          <option value="almarai">Almarai (المرعي - واضح)</option>
-                          <option value="nastaleeq">Nastaleeq (نستعلیق)</option>
+                        <optgroup label="── Urdu & Arabic Fonts (خطوط اردو وعربية) ──">
+                          {FONT_OPTIONS.filter((f) => f.group === 'Urdu / Arabic').map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.label}
+                            </option>
+                          ))}
                         </optgroup>
                         <optgroup label="── English Fonts ──">
-                          <option value="inter">Inter (Clean Sans)</option>
-                          <option value="playfair">Playfair Display (Serif)</option>
-                          <option value="lora">Lora (Editorial Serif)</option>
-                          <option value="outfit">Outfit (Modern Sans)</option>
-                          <option value="jetbrains">JetBrains Mono (Monospace)</option>
+                          {FONT_OPTIONS.filter((f) => f.group === 'English').map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.label}
+                            </option>
+                          ))}
                         </optgroup>
                       </select>
                     </div>
@@ -2160,12 +2210,22 @@ export default function App() {
                         className={`card-color-swatch swatch-${col.id} ${editFormData.cardColor === col.id ? 'active' : ''}`}
                         onClick={() => setEditFormData((current) => ({ ...current, cardColor: col.id }))}
                         title={col.label}
+                        aria-label={col.label}
                       >
-                        <span className="swatch-indicator" />
-                        <span className="swatch-name">{col.label}</span>
-                        {editFormData.cardColor === col.id && <Check size={13} className="swatch-check" />}
+                        <span className="swatch-indicator" style={col.bg ? { backgroundColor: col.bg } : undefined} />
+                        {editFormData.cardColor === col.id && <Check size={12} className="swatch-check" />}
                       </button>
                     ))}
+                    <label className="card-color-custom-label" title="Pick custom card background color">
+                      <input
+                        type="color"
+                        className="custom-color-input"
+                        value={editFormData.cardColor?.startsWith('#') ? editFormData.cardColor : '#ffffff'}
+                        onChange={(e) => setEditFormData((c) => ({ ...c, cardColor: e.target.value }))}
+                        aria-label="Custom card background color"
+                      />
+                      <Pipette size={13} className="custom-picker-icon" />
+                    </label>
                   </div>
                 </div>
 
@@ -2202,14 +2262,17 @@ export default function App() {
                     />
                   </label>
 
-                  <label className="favorite-toggle compact-fav">
-                    <input
-                      type="checkbox"
-                      checked={editFormData.favorite}
-                      onChange={(event) => setEditFormData((current) => ({ ...current, favorite: event.target.checked }))}
-                    />
-                    <Star size={16} className={editFormData.favorite ? 'filled' : ''} /> Favorite
-                  </label>
+                  <div className="field compact">
+                    <span className="field-label-spacer" aria-hidden="true">&nbsp;</span>
+                    <label className="favorite-toggle compact-fav">
+                      <input
+                        type="checkbox"
+                        checked={editFormData.favorite}
+                        onChange={(event) => setEditFormData((current) => ({ ...current, favorite: event.target.checked }))}
+                      />
+                      <Star size={16} className={editFormData.favorite ? 'filled' : ''} /> Add Favorite
+                    </label>
+                  </div>
                 </div>
 
                 <div className="form-footer">
