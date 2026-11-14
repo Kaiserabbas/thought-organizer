@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { App as CapApp } from '@capacitor/app';
 import { GoogleDriveService } from './googleDrive';
+import { CloudVaultService } from './cloudVaultService';
 import CollectionsView from './CollectionsView';
 import SettingsView from './SettingsView';
 import ConfirmModal from './ConfirmModal';
@@ -23,6 +24,7 @@ import {
   Check,
   CheckCircle,
   ClipboardPaste,
+  Cloud,
   CloudLightning,
   Copy,
   Download,
@@ -310,8 +312,14 @@ export default function App() {
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [collectionSelectedCategory, setCollectionSelectedCategory] = useState('All');
   const [collectionFavoritesOnly, setCollectionFavoritesOnly] = useState(false);
+  const [syncCode, setSyncCode] = useState(() => CloudVaultService.getSyncCode());
   const [activeView, setActiveView] = useState('home');
-  const [status, setStatus] = useState('Ready');
+  const [status, setStatus] = useState(() => {
+    if (typeof window !== 'undefined' && CloudVaultService.isConfigured()) {
+      return 'Synced across devices';
+    }
+    return 'Ready';
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedThought, setSelectedThought] = useState(null);
   const [isEditingThought, setIsEditingThought] = useState(false);
@@ -609,21 +617,29 @@ export default function App() {
     };
   }, [token]);
 
-  // Synchronize with Google Drive
-  const syncWithDrive = useCallback(async (
+  // Master Sync: Synchronizes with Cloud Vault (Cross-Device) and Google Drive (if connected)
+  const performSync = useCallback(async (
     currentThoughts = thoughts,
     currentCategories = categories,
     options = {}
   ) => {
-    const { deletedIds = deletedThoughtIds, directPush = false, forcePull = false } = options;
+    const {
+      deletedIds = deletedThoughtIds,
+      directPush = false,
+      forcePull: _forcePull = false,
+      syncCodeOverride = null,
+    } = options;
 
-    if (!token || (tokenExpiry && Date.now() >= tokenExpiry)) {
-      if (token) clearGoogleToken();
-      return;
-    }
+    const activeSyncCode = syncCodeOverride || syncCode || CloudVaultService.getSyncCode();
+    const hasDrive = Boolean(token && (!tokenExpiry || Date.now() < tokenExpiry));
 
     if (!navigator.onLine) {
       setStatus('Offline (Saved locally)');
+      return;
+    }
+
+    if (!activeSyncCode && !hasDrive) {
+      setStatus('Saved Locally');
       return;
     }
 
@@ -637,53 +653,87 @@ export default function App() {
     setStatus('Syncing...');
 
     try {
-      const folderId = await GoogleDriveService.getOrCreateFolder(token);
-      const { fileId: activeFileId, isNew } = await GoogleDriveService.getOrCreateDataFile(token, folderId);
+      let finalThoughts = currentThoughts;
+      let finalCategories = currentCategories;
+      let combinedDeleted = deletedIds;
 
-      if (isNew || directPush) {
-        const snapshot = {
-          thoughts: currentThoughts,
-          categories: currentCategories,
-          deletedThoughtIds: deletedIds,
-          lastSyncedAt: Date.now(),
-        };
-        await GoogleDriveService.uploadThoughts(token, activeFileId, snapshot);
-      } else {
-        const remoteState = normalizeSnapshot(await GoogleDriveService.downloadThoughts(token, activeFileId));
-        const combinedDeleted = [...new Set([...deletedIds, ...(remoteState.deletedThoughtIds || [])])];
-        setDeletedThoughtIds(combinedDeleted);
+      // ── 1. Cloud Vault (Primary Cross-Device Sync) ──
+      if (activeSyncCode) {
+        const remoteVault = await CloudVaultService.downloadSnapshot(activeSyncCode);
+        if (remoteVault) {
+          const remoteDeleted = remoteVault.deletedThoughtIds || [];
+          combinedDeleted = [...new Set([...deletedIds, ...remoteDeleted])];
+          setDeletedThoughtIds(combinedDeleted);
 
-        let finalThoughts;
-        let finalCategories;
+          if (remoteVault.isNew || directPush) {
+            finalThoughts = currentThoughts;
+            finalCategories = currentCategories;
+          } else {
+            finalThoughts = mergeThoughts(currentThoughts, remoteVault.thoughts || [], combinedDeleted);
+            finalCategories = mergeCategories(currentCategories, remoteVault.categories || []);
+          }
 
-        if (forcePull && remoteState.thoughts.length > 0) {
-          finalThoughts = mergeThoughts(currentThoughts, remoteState.thoughts, combinedDeleted);
-          finalCategories = mergeCategories(currentCategories, remoteState.categories);
-        } else {
-          finalThoughts = mergeThoughts(currentThoughts, remoteState.thoughts, combinedDeleted);
-          finalCategories = mergeCategories(currentCategories, remoteState.categories);
+          setThoughts(finalThoughts);
+          setCategories(finalCategories);
+
+          await CloudVaultService.uploadSnapshot({
+            thoughts: finalThoughts,
+            categories: finalCategories,
+            deletedThoughtIds: combinedDeleted,
+            lastSyncedAt: Date.now(),
+          }, activeSyncCode);
         }
-
-        setThoughts(finalThoughts);
-        setCategories(finalCategories);
-
-        await GoogleDriveService.uploadThoughts(token, activeFileId, {
-          thoughts: finalThoughts,
-          categories: finalCategories,
-          deletedThoughtIds: combinedDeleted,
-          lastSyncedAt: Date.now(),
-        });
       }
 
-      setStatus('Saved to Drive');
+      // ── 2. Google Drive (Secondary Backup if connected) ──
+      if (hasDrive) {
+        try {
+          const folderId = await GoogleDriveService.getOrCreateFolder(token);
+          const { fileId: activeFileId, isNew } = await GoogleDriveService.getOrCreateDataFile(token, folderId);
+
+          if (isNew || directPush) {
+            await GoogleDriveService.uploadThoughts(token, activeFileId, {
+              thoughts: finalThoughts,
+              categories: finalCategories,
+              deletedThoughtIds: combinedDeleted,
+              lastSyncedAt: Date.now(),
+            });
+          } else if (!activeSyncCode) {
+            const remoteState = normalizeSnapshot(await GoogleDriveService.downloadThoughts(token, activeFileId));
+            const driveCombinedDeleted = [...new Set([...combinedDeleted, ...(remoteState.deletedThoughtIds || [])])];
+            setDeletedThoughtIds(driveCombinedDeleted);
+
+            finalThoughts = mergeThoughts(finalThoughts, remoteState.thoughts, driveCombinedDeleted);
+            finalCategories = mergeCategories(finalCategories, remoteState.categories);
+            setThoughts(finalThoughts);
+            setCategories(finalCategories);
+
+            await GoogleDriveService.uploadThoughts(token, activeFileId, {
+              thoughts: finalThoughts,
+              categories: finalCategories,
+              deletedThoughtIds: driveCombinedDeleted,
+              lastSyncedAt: Date.now(),
+            });
+          } else {
+            await GoogleDriveService.uploadThoughts(token, activeFileId, {
+              thoughts: finalThoughts,
+              categories: finalCategories,
+              deletedThoughtIds: combinedDeleted,
+              lastSyncedAt: Date.now(),
+            });
+          }
+        } catch (driveErr) {
+          console.warn('Google Drive sync skipped/failed:', driveErr);
+          if (driveErr?.status === 401) {
+            clearGoogleToken();
+          }
+        }
+      }
+
+      setStatus(activeSyncCode ? 'Synced across devices' : 'Saved to Drive');
     } catch (error) {
       console.error('Sync error:', error);
-      if (error?.status === 401) {
-        clearGoogleToken();
-        setStatus('Auth expired');
-      } else {
-        setStatus('Sync Error');
-      }
+      setStatus(error.message?.includes('decrypt') ? 'Sync Code Error' : 'Sync Error');
     } finally {
       isSyncingRef.current = false;
       setIsSyncing(false);
@@ -691,10 +741,12 @@ export default function App() {
       if (queuedSyncRef.current) {
         const next = queuedSyncRef.current;
         queuedSyncRef.current = null;
-        syncWithDrive(next.currentThoughts, next.currentCategories, next.options);
+        performSync(next.currentThoughts, next.currentCategories, next.options);
       }
     }
-  }, [categories, clearGoogleToken, deletedThoughtIds, thoughts, token, tokenExpiry]);
+  }, [categories, clearGoogleToken, deletedThoughtIds, syncCode, thoughts, token, tokenExpiry]);
+
+  const syncWithDrive = performSync;
 
   useEffect(() => {
     if (!token || syncedTokenRef.current === token) {
@@ -702,8 +754,65 @@ export default function App() {
     }
 
     syncedTokenRef.current = token;
-    syncWithDrive(thoughts, categories);
-  }, [token, thoughts, categories, syncWithDrive]);
+    performSync(thoughts, categories);
+  }, [token, thoughts, categories, performSync]);
+
+  // Auto-sync on startup if sync code is configured
+  useEffect(() => {
+    if (syncCode && navigator.onLine) {
+      performSync(thoughts, categories);
+    }
+  }, [syncCode, thoughts, categories, performSync]);
+
+  // Real-time synchronization when switching devices/tabs
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      if (syncCode && navigator.onLine && !isSyncingRef.current) {
+        performSync(thoughts, categories);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && syncCode && navigator.onLine && !isSyncingRef.current) {
+        performSync(thoughts, categories);
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Periodic sync interval every 45s when online
+    const interval = window.setInterval(() => {
+      if (syncCode && navigator.onLine && !isSyncingRef.current) {
+        performSync(thoughts, categories);
+      }
+    }, 45000);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [syncCode, thoughts, categories, performSync]);
+
+  const handleConnectSyncCode = async (newCode) => {
+    if (!newCode || !newCode.trim()) return;
+    const clean = newCode.trim();
+    CloudVaultService.setSyncCode(clean);
+    setSyncCode(clean);
+    setStatus('Connecting to Vault...');
+    await performSync(thoughts, categories, { forcePull: true, syncCodeOverride: clean });
+  };
+
+  const handleDisconnectSyncCode = () => {
+    CloudVaultService.clearSyncCode();
+    setSyncCode('');
+    setStatus('Disconnected from Vault');
+  };
+
+  const handleGenerateSyncCode = () => {
+    return CloudVaultService.generateSyncCode();
+  };
 
   // Modal keyboard dismiss
   useEffect(() => {
@@ -1165,22 +1274,22 @@ export default function App() {
             <img src="/logo.png" alt="Brain icon" width={120} height={120} />
           </div>
           <div>
-            <p className="eyebrow">Google Drive backed notebook</p>
+            <p className="eyebrow">Cross-device encrypted notebook</p>
             <h1>Thought Organizer</h1>
           </div>
         </div>
 
         <div className="header-actions">
-          {/* Quick Refresh Memory Button */}
+          {/* Quick Refresh / Sync Button */}
           <button
             type="button"
             className="action-button refresh-top-button"
             onClick={handleRefreshMemory}
             disabled={isSyncing}
-            title="Refresh memory from Google Drive"
+            title={syncCode ? 'Sync latest changes across devices' : 'Refresh memory'}
           >
             <RotateCw size={15} className={isSyncing ? 'spin' : ''} />
-            <span className="btn-text">Refresh</span>
+            <span className="btn-text">{isSyncing ? 'Syncing...' : 'Sync'}</span>
           </button>
 
           {/* Quick Theme Toggle Button */}
@@ -1196,20 +1305,25 @@ export default function App() {
 
           <span className="status-pill">
             {isSyncing && <CloudLightning className="status-icon pulse" />}
-            {status.includes('Saved') && <CheckCircle className="status-icon success" />}
+            {!isSyncing && (syncCode || token) && <CheckCircle className="status-icon success" />}
             {status.includes('Offline') && <WifiOff className="status-icon" />}
             {status}
           </span>
 
-          {token ? (
+          {!syncCode && !token ? (
+            <button
+              type="button"
+              className="primary-button sync-top-btn"
+              onClick={() => setActiveView('settings')}
+              title="Pair this device to sync across all devices"
+            >
+              <Cloud size={14} /> <span className="btn-text">Sync Devices</span>
+            </button>
+          ) : token ? (
             <button type="button" className="action-link" onClick={handleLogout} title="Sign out of Google Drive">
               <LogOut size={16} /> <span className="btn-text">Sign out</span>
             </button>
-          ) : (
-            <button type="button" className="primary-button" onClick={handleLogin}>
-              Connect Drive
-            </button>
-          )}
+          ) : null}
         </div>
       </header>
 
@@ -1826,6 +1940,11 @@ export default function App() {
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             onManualToken={handleManualToken}
+            syncCode={syncCode}
+            onConnectSyncCode={handleConnectSyncCode}
+            onDisconnectSyncCode={handleDisconnectSyncCode}
+            onGenerateSyncCode={handleGenerateSyncCode}
+            onManualSync={handleRefreshMemory}
             ttsRate={ttsRate}
             setTtsRate={setTtsRate}
             ttsPitch={ttsPitch}

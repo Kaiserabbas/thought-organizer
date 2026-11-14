@@ -71,6 +71,11 @@ export default function SettingsView({
   onExportBackup,
   onImportBackup,
   onManualToken,
+  syncCode = '',
+  onConnectSyncCode,
+  onDisconnectSyncCode,
+  onGenerateSyncCode,
+  onManualSync,
   ttsRate = 0.85,
   setTtsRate,
   ttsPitch = 0.68,
@@ -82,6 +87,11 @@ export default function SettingsView({
   onTestSpeak,
 }) {
   const [activeTab, setActiveTab] = useState('all');
+
+  // Cloud Vault Sync state
+  const [inputSyncCode, setInputSyncCode] = useState('');
+  const [showVaultSecret, setShowVaultSecret] = useState(false);
+  const [copiedCodeToast, setCopiedCodeToast] = useState(false);
 
   // Categories & Backup
   const [newCatInput, setNewCatInput] = useState('');
@@ -1235,6 +1245,162 @@ export default function SettingsView({
                 <span>Dark Mode</span>
               </button>
             </div>
+          </section>
+        )}
+
+        {/* ── Cross-Device Cloud Vault (Instant Multi-Device Sync) ── */}
+        {showCloud && (
+          <section className="settings-card cloud-vault-card">
+            <div className="card-section-heading">
+              <div className="settings-icon-badge vault-badge">
+                <Cloud size={22} />
+              </div>
+              <div>
+                <h3>Cross-Device Cloud Vault</h3>
+                <p className="card-subtitle">Sync your thoughts across phone, laptop, and tablet instantly with zero setup</p>
+              </div>
+            </div>
+
+            <div className="sync-status-row">
+              <span className="status-label">Vault Connection:</span>
+              <span className={`status-pill ${syncCode ? 'connected' : ''}`}>
+                <span className={`status-dot ${syncCode ? 'active' : ''}`} />
+                {syncCode ? 'Connected & Encrypted' : 'Disconnected (Local Only)'}
+              </span>
+            </div>
+
+            {syncCode ? (
+              <div className="vault-connected-panel">
+                <div className="vault-code-display">
+                  <span className="vault-code-label">Active Sync Code:</span>
+                  <div className="vault-code-badge">
+                    <code>{showVaultSecret ? syncCode : '••••••••••••••••'}</code>
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={() => setShowVaultSecret((v) => !v)}
+                      title={showVaultSecret ? 'Hide Code' : 'Show Code'}
+                      aria-label="Toggle code visibility"
+                    >
+                      {showVaultSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(syncCode);
+                        setCopiedCodeToast(true);
+                        setTimeout(() => setCopiedCodeToast(false), 2000);
+                      }}
+                      title="Copy Sync Code"
+                      aria-label="Copy Sync Code"
+                    >
+                      {copiedCodeToast ? <Check size={15} style={{ color: '#16a34a' }} /> : <Copy size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="vault-help-box">
+                  <p>
+                    🔒 <strong>Sync on another device:</strong>
+                  </p>
+                  <ol style={{ margin: '4px 0 0', paddingInlineStart: '20px', fontSize: '0.86rem', lineHeight: '1.5' }}>
+                    <li>Open <code>https://organizedthoughts.netlify.app</code> on your phone or other device.</li>
+                    <li>Go to <strong>Settings &gt; Cloud &amp; Sync</strong>.</li>
+                    <li>Paste or type this exact Sync Code: <strong>{syncCode}</strong></li>
+                  </ol>
+                  <p style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    ✨ Changes automatically sync both ways with 256-bit AES-GCM client-side encryption.
+                  </p>
+                </div>
+
+                <div className="sync-actions-row">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onManualSync && onManualSync()}
+                    disabled={isSyncing}
+                  >
+                    <RotateCw size={16} className={isSyncing ? 'spin' : ''} />
+                    {isSyncing ? 'Syncing...' : 'Sync Now'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => onDisconnectSyncCode && onDisconnectSyncCode()}
+                  >
+                    <LogOut size={16} /> Disconnect Vault
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="vault-setup-panel">
+                <p className="vault-lead-text">
+                  Pair your devices without dealing with passwords or expiring OAuth tokens. Enter an existing Sync Code to link this device, or generate a new code.
+                </p>
+
+                <div className="api-key-input-wrapper">
+                  <input
+                    type="text"
+                    placeholder="Enter or paste Sync Code (e.g. THOUGHT-9X4K-7M2Q)"
+                    value={inputSyncCode}
+                    onChange={(e) => setInputSyncCode(e.target.value)}
+                    className="api-key-input"
+                    dir="ltr"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && inputSyncCode.trim()) {
+                        onConnectSyncCode(inputSyncCode.trim());
+                        setInputSyncCode('');
+                      }
+                    }}
+                  />
+                  <div className="api-key-inline-actions">
+                    <button
+                      type="button"
+                      className="key-action-icon-btn"
+                      onClick={async () => {
+                        const text = await navigator.clipboard?.readText();
+                        if (text) setInputSyncCode(text.trim());
+                      }}
+                      title="Paste from clipboard"
+                      aria-label="Paste from clipboard"
+                    >
+                      <ClipboardPaste size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="sync-actions-row" style={{ marginTop: '12px' }}>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => {
+                      if (inputSyncCode.trim()) {
+                        onConnectSyncCode(inputSyncCode.trim());
+                        setInputSyncCode('');
+                      }
+                    }}
+                    disabled={!inputSyncCode.trim() || isSyncing}
+                  >
+                    <Check size={16} /> Connect Vault
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      if (onGenerateSyncCode) {
+                        const newCode = onGenerateSyncCode();
+                        onConnectSyncCode(newCode);
+                      }
+                    }}
+                  >
+                    <Sparkles size={16} /> Generate New Sync Code
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
